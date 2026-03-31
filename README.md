@@ -1,11 +1,19 @@
 # Glance 维护版
 
 [![Release](https://img.shields.io/github/v/release/lvshp/glance?label=%E5%8F%91%E5%B8%83%E7%89%88)](https://github.com/lvshp/glance/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/lvshp/glance/go.yml?branch=master&label=CI)](https://github.com/lvshp/glance/actions/workflows/go.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
 <img src="https://github.com/TimothyYe/glance/blob/master/demo/glance.png?raw=true" width="120" />
 
 一个持续维护中的命令行小说阅读工具分支，主打 EPUB、进度恢复、终端自适应排版，以及更像 IDE 的摸鱼伪装界面。
+
+适合这样的使用场景：
+
+* 在终端里阅读 TXT / EPUB
+* 在工作环境下低调摸鱼
+* 想保留键盘流操作和轻量体验
+* 想要一个还在持续维护的 Glance 分支
 
 ![](https://github.com/TimothyYe/glance/blob/master/demo/demo.gif?raw=true)
 
@@ -44,6 +52,17 @@
 * 支持Boss Key，方便紧急情况下对界面隐藏和伪装。
 * 支持自动定时翻页模式
 
+## 维护版增强
+
+相比原项目，这个维护版本重点增强了下面几块：
+
+* EPUB 支持与章节目录导航
+* 记忆阅读进度与自动恢复
+* 多行显示、按页滚动、数字跳章
+* 按终端宽度与中文显示宽度自适应排版
+* IDE 风格工作台界面，更适合伪装成开发环境
+* 多平台 Release 附件与自动发布流程
+
 ## 安装步骤
 
 如果你使用的是这个维护版本，可以直接下载 Release 附件，或者从源码构建：
@@ -53,6 +72,12 @@ git clone https://github.com/lvshp/glance.git
 cd glance
 go build -o glance ./cmd
 ./glance -n 8 /path/to/book.epub
+```
+
+如果你已经把可执行文件放进 `PATH`，也可以直接：
+
+```bash
+glance -n 8 /path/to/book.epub
 ```
 
 原项目安装方式如下：
