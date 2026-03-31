@@ -2,4 +2,7 @@ module github.com/TimothyYe/glance
 
 go 1.12
 
-require github.com/gizak/termui/v3 v3.1.0
+require (
+	github.com/gizak/termui/v3 v3.1.0
+	github.com/mattn/go-runewidth v0.0.2
+)

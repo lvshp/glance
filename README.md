@@ -8,6 +8,19 @@
 
 [English Version](#)
 
+## Fork 说明
+
+这个仓库基于原项目 [TimothyYe/glance](https://github.com/TimothyYe/glance) 修改而来。
+
+我在保留原项目协议与致谢的基础上，继续维护并补充了以下能力：
+
+* EPUB 支持
+* EPUB 章节目录与目录跳转
+* 自动记忆阅读进度并恢复
+* 多行显示与按页翻页
+* 按终端宽度自适应折行
+* 更偏 IDE / 工作台风格的伪装界面
+
 ## 功能亮点
 
 * 使用Go开发，无需额外运行时和依赖库。
@@ -17,7 +30,16 @@
 
 ## 安装步骤
 
-其实，你和摸鱼之间，只有两步的距离：
+如果你使用的是这个维护版本，推荐直接从源码构建：
+
+```bash
+git clone <your-repo-url>
+cd glance
+go build -o glance ./cmd
+./glance -n 8 /path/to/book.epub
+```
+
+原项目安装方式如下：
 
 ```bash
 brew tap timothyye/tap
@@ -34,14 +56,18 @@ brew install timothyye/tap/glance
 ## 支持格式
 * TXT (已支持)
 * PDF (计划中)
-* epub (计划中)
+* EPUB (已支持)
 
 ## 快捷键说明
 
 * `?` 显示与隐藏帮助菜单
 * `q` 或者 `ctrl+c` 退出程序
-* `j`, `ctrl+n`, `<Space>` 或者 `<Enter>` 显示下一行内容
-* `k` 或者 `ctrl+p` 显示上一行内容
+* `j`, `ctrl+n`, `<Space>` 或者 `<Enter>` 按当前显示行数向下翻一页
+* `k` 或者 `ctrl+p` 按当前显示行数向上翻一页
+* `+` / `-` 增加或减少同时显示的正文行数
+* `[` 跳转到上一章（EPUB）
+* `]` 跳转到下一章（EPUB）
+* `m` 显示与隐藏目录（EPUB，目录中可用 `j/k` 选择、数字加 `Enter` 跳转，`*` 为当前章节）
 * `p` 显示与隐藏当前阅读进度
 * `b` Boss Key，隐藏当前内容并显示伪装Shell提示符
 * `f` 显示与隐藏边框
@@ -75,8 +101,8 @@ Glance可以运行在任何支持Terminal的开发软件及环境中，包括并
 
 ## Issue 与 PR
 
-欢迎提交issue与merge request。
+欢迎基于这个维护版本提交 issue 与 PR。
 
 ## 协议
 
-本开源软件基于[Apache License 2.0](#)。
+本项目基于原项目继续演进，并继续遵循 [Apache License 2.0](./LICENSE)。
