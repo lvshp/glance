@@ -1,8 +1,11 @@
-# Glance
+# Glance 维护版
+
+[![Release](https://img.shields.io/github/v/release/lvshp/glance?label=%E5%8F%91%E5%B8%83%E7%89%88)](https://github.com/lvshp/glance/releases)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
 <img src="https://github.com/TimothyYe/glance/blob/master/demo/glance.png?raw=true" width="120" />
 
-一款基于命令行跨平台文本小说阅读工具，996与10107程序员摸鱼划水必备神器。
+一个持续维护中的命令行小说阅读工具分支，主打 EPUB、进度恢复、终端自适应排版，以及更像 IDE 的摸鱼伪装界面。
 
 ![](https://github.com/TimothyYe/glance/blob/master/demo/demo.gif?raw=true)
 
@@ -21,6 +24,19 @@
 * 按终端宽度自适应折行
 * 更偏 IDE / 工作台风格的伪装界面
 
+## 下载
+
+发布版本与预编译包：
+
+* [Releases 页面](https://github.com/lvshp/glance/releases)
+* [v0.1.0 首个维护版发布](https://github.com/lvshp/glance/releases/tag/v0.1.0)
+
+当前已提供：
+
+* macOS arm64
+* macOS amd64
+* Linux amd64
+
 ## 功能亮点
 
 * 使用Go开发，无需额外运行时和依赖库。
@@ -30,10 +46,10 @@
 
 ## 安装步骤
 
-如果你使用的是这个维护版本，推荐直接从源码构建：
+如果你使用的是这个维护版本，可以直接下载 Release 附件，或者从源码构建：
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/lvshp/glance.git
 cd glance
 go build -o glance ./cmd
 ./glance -n 8 /path/to/book.epub
