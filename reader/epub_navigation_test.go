@@ -132,3 +132,90 @@ func TestEpubReaderSkipsCoverFrontMatterOnOpen(t *testing.T) {
 		t.Fatalf("toc = %q", got)
 	}
 }
+
+func TestEpubReaderDeduplicatesLeadingTitleBlock(t *testing.T) {
+	tempDir := t.TempDir()
+	bookPath := filepath.Join(tempDir, "dup-title.epub")
+
+	files := map[string]string{
+		"META-INF/container.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`,
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="UTF-8"?>
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf">
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="chapter-1" href="text/chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chapter-1"/>
+  </spine>
+</package>`,
+		"OEBPS/nav.xhtml": `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+  <body>
+    <nav epub:type="toc">
+      <ol>
+        <li><a href="text/chapter1.xhtml">第04章 暧昧的表姐弟</a></li>
+      </ol>
+    </nav>
+  </body>
+</html>`,
+		"OEBPS/text/chapter1.xhtml": `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body><h1>第04章 暧昧的表姐弟</h1><p>第04章</p><p>暧昧的表姐弟</p><p>正文开始</p></body></html>`,
+	}
+
+	if err := writeTestZip(bookPath, files); err != nil {
+		t.Fatalf("write epub: %v", err)
+	}
+
+	r := NewEpubReader()
+	if err := r.Load(bookPath); err != nil {
+		t.Fatalf("load epub: %v", err)
+	}
+
+	if got := r.CurrentView(3); got != "第04章 暧昧的表姐弟\n正文开始" {
+		t.Fatalf("current view = %q", got)
+	}
+}
+
+func TestEpubReaderUsesMetadataTitle(t *testing.T) {
+	tempDir := t.TempDir()
+	bookPath := filepath.Join(tempDir, "meta-title.epub")
+	if err := writeTestZip(bookPath, map[string]string{
+		"META-INF/container.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`,
+		"OEBPS/content.opf": `<?xml version="1.0" encoding="UTF-8"?>
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <metadata>
+    <dc:title>三国当混蛋</dc:title>
+  </metadata>
+  <manifest>
+    <item id="chapter-1" href="text/chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chapter-1"/>
+  </spine>
+</package>`,
+		"OEBPS/text/chapter1.xhtml": `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body><h1>第一章</h1><p>正文</p></body></html>`,
+	}); err != nil {
+		t.Fatalf("write epub: %v", err)
+	}
+
+	r := NewEpubReader()
+	if err := r.Load(bookPath); err != nil {
+		t.Fatalf("load epub: %v", err)
+	}
+
+	if got := r.BookTitle(); got != "三国当混蛋" {
+		t.Fatalf("book title = %q", got)
+	}
+}

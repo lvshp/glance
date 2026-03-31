@@ -11,6 +11,22 @@ type ProgressStore struct {
 }
 
 func progressFilePath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, dataDirName, "progress.json"), nil
+}
+
+func legacyRootProgressFilePath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, legacyRootDir, "progress.json"), nil
+}
+
+func legacyReadcliProgressFilePath() (string, error) {
 	return filepath.Join(mustUserConfigDir(), appName, "progress.json"), nil
 }
 
@@ -26,9 +42,24 @@ func LoadProgress() (*ProgressStore, error) {
 
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		legacyPath, legacyErr := legacyProgressFilePath()
-		if legacyErr == nil {
+		legacyFns := []func() (string, error){
+			legacyRootProgressFilePath,
+			legacyReadcliProgressFilePath,
+			legacyProgressFilePath,
+		}
+		for _, pathFn := range legacyFns {
+			legacyPath, legacyErr := pathFn()
+			if legacyErr != nil {
+				continue
+			}
 			data, err = os.ReadFile(legacyPath)
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			break
 		}
 		if os.IsNotExist(err) {
 			return &ProgressStore{Books: make(map[string]int)}, nil

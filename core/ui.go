@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/TimothyYe/glance/reader"
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
+	"github.com/mattn/go-runewidth"
 )
 
 type mode string
@@ -67,6 +69,7 @@ type appState struct {
 	inputCursor     int
 	inputHints      []string
 	inputHintIndex  int
+	importRecursive bool
 	searchQuery     string
 	lastSearchIndex int
 
@@ -98,6 +101,12 @@ var (
 	rightPanel *widgets.Paragraph
 	footer     *widgets.Paragraph
 )
+
+var titleNoiseSuffixPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\s*[\(_\[]\s*z[\s\-_]*library\s*[\)\]_]?\s*$`),
+	regexp.MustCompile(`(?i)\s*[\(_\[]\s*来自\s*z[\s\-_]*library\s*[\)\]_]?\s*$`),
+	regexp.MustCompile(`(?i)\s*[\(_\[]\s*downloaded\s+from\s+z[\s\-_]*library\s*[\)\]_]?\s*$`),
+}
 
 func availableThemes() map[string]theme {
 	return map[string]theme{
@@ -182,6 +191,7 @@ func Run(initialFile string, requestedLines int) {
 		themeOrder:      []string{"vscode", "jetbrains", "ops-console"},
 		sortMode:        "recent",
 		filterMode:      "all",
+		importRecursive: false,
 		shelfIndex:      cfg.SelectedBookshelf,
 		lastSearchIndex: -1,
 		sessionStart:    time.Now(),
@@ -318,7 +328,7 @@ func newReaderForPath(path string) (reader.Reader, error) {
 func upsertCurrentBook(path string) *lib.BookshelfBook {
 	book := lib.BookshelfBook{
 		Path:            path,
-		Title:           strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)),
+		Title:           bookTitleForPath(path, app.reader.BookTitle()),
 		Format:          strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), "."),
 		ProgressPos:     app.reader.CurrentPos(),
 		ProgressTotal:   app.reader.Total(),
@@ -346,7 +356,7 @@ func syncCurrentBookState() {
 
 	book := lib.BookshelfBook{
 		Path:            app.currentFile,
-		Title:           strings.TrimSuffix(filepath.Base(app.currentFile), filepath.Ext(app.currentFile)),
+		Title:           bookTitleForPath(app.currentFile, app.reader.BookTitle()),
 		Format:          strings.TrimPrefix(strings.ToLower(filepath.Ext(app.currentFile)), "."),
 		ProgressPos:     app.reader.CurrentPos(),
 		ProgressTotal:   app.reader.Total(),
@@ -374,6 +384,36 @@ func progressPercent(pos, total int) int {
 		return 0
 	}
 	return int(float64(pos) * 100 / float64(total-1))
+}
+
+func bookTitleForPath(path, preferred string) string {
+	preferred = sanitizeBookTitle(preferred)
+	if preferred != "" {
+		return preferred
+	}
+	return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+}
+
+func sanitizeBookTitle(title string) string {
+	title = strings.TrimSpace(title)
+	title = strings.Join(strings.Fields(title), " ")
+	title = stripKnownTitleNoise(title)
+	title = strings.TrimSpace(title)
+	title = strings.Trim(title, "[]【】")
+	title = stripKnownTitleNoise(title)
+	if title == "" {
+		return ""
+	}
+	return title
+}
+
+func stripKnownTitleNoise(title string) string {
+	cleaned := strings.TrimSpace(title)
+	for _, pattern := range titleNoiseSuffixPatterns {
+		cleaned = pattern.ReplaceAllString(cleaned, "")
+		cleaned = strings.TrimSpace(cleaned)
+	}
+	return cleaned
 }
 
 func visibleBooks() []lib.BookshelfBook {
@@ -479,6 +519,13 @@ func renderUI() {
 		drawables = append(drawables, rightPanel)
 	}
 	ui.Render(drawables...)
+}
+
+func renderUIIfReady() {
+	if header == nil || mainPanel == nil || footer == nil {
+		return
+	}
+	renderUI()
 }
 
 func refreshChrome() {
@@ -613,10 +660,10 @@ func buildLeftPanel(th theme) string {
 				"",
 				"[Actions](fg:yellow,mod:bold)",
 				"  Enter   打开书籍",
-				"  i       导入本地文件",
-				"  o       切换排序",
-				"  r       切换过滤",
-				"  x       删除书籍",
+				"  i       导入文件",
+				"  o       排序视图",
+				"  r       过滤视图",
+				"  x       移出书架",
 				"  T       切换主题",
 				"",
 				"[Sort](fg:yellow,mod:bold)",
@@ -713,9 +760,16 @@ func buildRightPanel(th theme) string {
 			if book.LastReadAt != "" {
 				lastRead = formatStamp(book.LastReadAt)
 			}
+			status := "未读"
+			if book.ProgressPercent >= 100 {
+				status = "已读"
+			} else if book.ProgressPos > 0 {
+				status = "在读"
+			}
 			lines = append(lines,
 				"  标题    "+shorten(book.Title, 16),
 				"  格式    "+strings.ToUpper(book.Format),
+				"  状态    "+status,
 				fmt.Sprintf("  进度    %d%%", book.ProgressPercent),
 				"  章节    "+shorten(book.CurrentChapter, 16),
 				"  最近    "+shorten(lastRead, 16),
@@ -753,71 +807,125 @@ func buildRightPanel(th theme) string {
 	progress := ""
 	chapter := ""
 	total := 0
+	current := 0
 	if app.reader != nil {
 		progress = app.reader.GetProgress()
 		chapter = app.reader.CurrentChapterTitle()
 		total = app.reader.Total()
+		current = app.reader.CurrentPos() + 1
 	}
 	if chapter == "" {
 		chapter = "General"
 	}
+	width := 16
+	if rightPanel != nil && rightPanel.Inner.Dx() > 6 {
+		width = rightPanel.Inner.Dx() - 6
+	}
 	switch th.Name {
 	case "jetbrains":
-		return strings.Join([]string{
-			"[Structure](fg:yellow,mod:bold)",
-			"",
-			"  chapter   " + shorten(chapter, 15),
-			"  progress  " + shorten(progress, 16),
-			fmt.Sprintf("  total     %d lines", total),
-			"",
-			"[Find](fg:cyan,mod:bold)",
-			"  query     " + shorten(app.searchQuery, 15),
-			"",
-			"[Problems](fg:magenta,mod:bold)",
-			"  0 unresolved",
-			"  layout synced",
-			"  session warm",
-		}, "\n")
+		lines := []string{"[Structure](fg:yellow,mod:bold)", ""}
+		lines = append(lines, buildDetailBlock("章节", chapter, width)...)
+		lines = append(lines, "")
+		lines = append(lines, buildDetailBlock("进度", formatProgressSummary(current, total, progress), width)...)
+		lines = append(lines, "")
+		lines = append(lines, buildDetailBlock("总行数", fmt.Sprintf("%d lines", total), width)...)
+		lines = append(lines, "", "[Find](fg:cyan,mod:bold)", "")
+		lines = append(lines, buildDetailBlock("查询", emptyFallback(app.searchQuery, "无"), width)...)
+		lines = append(lines, "", "[Problems](fg:magenta,mod:bold)", "  0 unresolved", "  layout synced", "  session warm")
+		return strings.Join(lines, "\n")
 	case "ops-console":
-		return strings.Join([]string{
-			"[Telemetry](fg:green,mod:bold)",
-			"",
-			"  chapter   " + shorten(chapter, 15),
-			"  progress  " + shorten(progress, 16),
-			fmt.Sprintf("  total     %d lines", total),
-			"",
-			"[Query](fg:red,mod:bold)",
-			"  token     " + shorten(app.searchQuery, 15),
-			"",
-			"[Live Feed](fg:cyan,mod:bold)",
-			"  reader resumed",
-			"  progress synced",
-			"  monitor stable",
-		}, "\n")
+		lines := []string{"[Telemetry](fg:green,mod:bold)", ""}
+		lines = append(lines, buildDetailBlock("章节", chapter, width)...)
+		lines = append(lines, "")
+		lines = append(lines, buildDetailBlock("进度", formatProgressSummary(current, total, progress), width)...)
+		lines = append(lines, "")
+		lines = append(lines, buildDetailBlock("总行数", fmt.Sprintf("%d lines", total), width)...)
+		lines = append(lines, "", "[Query](fg:red,mod:bold)", "")
+		lines = append(lines, buildDetailBlock("关键词", emptyFallback(app.searchQuery, "无"), width)...)
+		lines = append(lines, "", "[Live Feed](fg:cyan,mod:bold)", "  reader resumed", "  progress synced", "  monitor stable")
+		return strings.Join(lines, "\n")
 	default:
-		return strings.Join([]string{
-			"[Inspector](fg:cyan,mod:bold)",
-			"",
-			"  chapter   " + shorten(chapter, 15),
-			"  progress  " + shorten(progress, 16),
-			fmt.Sprintf("  total     %d lines", total),
-			"",
-			"[Search](fg:yellow,mod:bold)",
-			"  query     " + shorten(app.searchQuery, 15),
-			"",
-			"[Recent Logs](fg:green,mod:bold)",
-			"  reader resumed",
-			"  progress synced",
-			"  layout stable",
-		}, "\n")
+		lines := []string{"[Inspector](fg:cyan,mod:bold)", ""}
+		lines = append(lines, buildDetailBlock("章节", chapter, width)...)
+		lines = append(lines, "")
+		lines = append(lines, buildDetailBlock("进度", formatProgressSummary(current, total, progress), width)...)
+		lines = append(lines, "")
+		lines = append(lines, buildDetailBlock("总行数", fmt.Sprintf("%d lines", total), width)...)
+		lines = append(lines, "", "[Search](fg:yellow,mod:bold)", "")
+		lines = append(lines, buildDetailBlock("查询", emptyFallback(app.searchQuery, "无"), width)...)
+		lines = append(lines, "", "[Recent Logs](fg:green,mod:bold)", "  reader resumed", "  progress synced", "  layout stable")
+		return strings.Join(lines, "\n")
 	}
+}
+
+func buildDetailBlock(label, value string, width int) []string {
+	lines := []string{"  " + label}
+	for _, line := range wrapDisplayLines(value, width) {
+		lines = append(lines, "    "+line)
+	}
+	return lines
+}
+
+func wrapDisplayLines(text string, width int) []string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return []string{"-"}
+	}
+	if width < 6 {
+		width = 6
+	}
+	parts := strings.Split(text, "\n")
+	lines := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		for runewidth.StringWidth(part) > width {
+			segment := runewidth.Truncate(part, width, "")
+			lines = append(lines, segment)
+			part = strings.TrimSpace(strings.TrimPrefix(part, segment))
+			if part == "" {
+				break
+			}
+		}
+		if part != "" {
+			lines = append(lines, part)
+		}
+	}
+	if len(lines) == 0 {
+		return []string{"-"}
+	}
+	return lines
+}
+
+func formatProgressSummary(current, total int, raw string) string {
+	if total <= 0 {
+		return raw
+	}
+	percent := 0
+	if total > 1 && current > 0 {
+		percent = int(float64(current-1) * 100 / float64(total-1))
+		if current >= total {
+			percent = 100
+		}
+	}
+	return fmt.Sprintf("%d / %d\n%d%%", current, total, percent)
+}
+
+func emptyFallback(value, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func buildFooter() string {
 	elapsed := time.Since(app.sessionStart).Round(time.Minute)
 	tag := currentTheme().FooterTag
-	line1 := fmt.Sprintf("[%s](fg:black,bg:green,mod:bold)  utf-8  session [%s](fg:yellow)  theme [%s](fg:cyan)",
-		tag, elapsed, app.config.Theme)
+	line1 := fmt.Sprintf("[%s](fg:black,bg:green,mod:bold)  utf-8  session [%s](fg:yellow)  theme [%s](fg:cyan)  status [%s](fg:green)",
+		tag, elapsed, app.config.Theme, shorten(app.statusMessage, 28))
 	line2 := fmt.Sprintf("status: [%s](fg:cyan)", shorten(app.statusMessage, 72))
 	switch app.mode {
 	case modeHome:
@@ -831,7 +939,11 @@ func buildFooter() string {
 	case modeSearchInput:
 		return line1 + "\n输入搜索关键字，支持左右移动，Enter 执行，Esc 取消"
 	case modeImportInput:
-		return line1 + "\n输入本地书籍路径，支持方向键和 Tab 补全，Enter 填入或导入，Esc 取消"
+		scope := "当前层"
+		if app.importRecursive {
+			scope = "递归"
+		}
+		return line1 + "\n输入文件或文件夹路径，Tab 补全，Ctrl-r 切换扫描范围(" + scope + ")，Esc 取消"
 	case modeDeleteConfirm:
 		return line1 + "\n[y](fg:cyan):仅移出书架  [D](fg:red):删除本地文件  [Esc](fg:yellow):取消"
 	default:
@@ -857,14 +969,20 @@ func buildMainPanel() string {
 	case modeHome:
 		return buildBookshelfPanel()
 	case modeImportInput:
+		scopeLabel := "当前层"
+		if app.importRecursive {
+			scopeLabel = "递归子目录"
+		}
 		lines := []string{
 			"导入本地书籍",
 			"",
-			"请输入 txt 或 epub 的完整路径：",
+			"请输入 txt / epub 文件路径，或一个文件夹路径：",
 			"",
 			renderInputWithCursor(app.inputValue, app.inputCursor),
 			"",
-			"支持左右移动、删除和 Tab 补全。",
+			"支持左右移动、删除、Tab 补全、拖入文件/目录，以及目录批量导入。",
+			"当前扫描范围：" + scopeLabel,
+			"按 Ctrl-r 切换当前层 / 递归子目录。",
 		}
 		if len(app.inputHints) > 0 {
 			pageSize := importHintPageSize()
@@ -902,8 +1020,39 @@ func buildMainPanel() string {
 		if app.reader == nil {
 			return "未打开书籍"
 		}
-		return app.reader.CurrentView(app.displayLines)
+		return highlightSearchMatches(app.reader.CurrentView(app.displayLines), app.searchQuery)
 	}
+}
+
+func highlightSearchMatches(text, query string) string {
+	query = strings.TrimSpace(query)
+	if text == "" || query == "" {
+		return text
+	}
+
+	lowerText := strings.ToLower(text)
+	lowerQuery := strings.ToLower(query)
+	if lowerQuery == "" {
+		return text
+	}
+
+	var b strings.Builder
+	start := 0
+	for {
+		idx := strings.Index(lowerText[start:], lowerQuery)
+		if idx < 0 {
+			b.WriteString(text[start:])
+			break
+		}
+		idx += start
+		end := idx + len(lowerQuery)
+		b.WriteString(text[start:idx])
+		b.WriteString("[")
+		b.WriteString(text[idx:end])
+		b.WriteString("](fg:black,bg:yellow,mod:bold)")
+		start = end
+	}
+	return b.String()
 }
 
 func buildHelpPanel() string {
@@ -925,7 +1074,7 @@ func buildHelpPanel() string {
 		"[书架首页](fg:magenta,mod:bold)\n  ↑/↓ 选择\n  → 或 Enter 打开",
 		"[阅读界面](fg:magenta,mod:bold)\n  ↑/↓ 翻页\n  ←/→ 切章",
 		"[目录 / 书签](fg:magenta,mod:bold)\n  ↑/↓ 移动\n  → 或 Enter 打开\n  ← 返回",
-		"[导入输入](fg:magenta,mod:bold)\n  ←/→ 移动光标\n  ↑/↓ 选择候选\n  Tab 补全\n  Enter 填入或导入\n  Esc 取消",
+		"[导入输入](fg:magenta,mod:bold)\n  ←/→ 移动光标\n  ↑/↓ 选择候选\n  Tab 补全\n  拖入文件/目录自动取路径\n  Ctrl-r 切换递归\n  Enter 填入或导入\n  Esc 取消",
 	}
 
 	left := leftTitle + "\n\n" + strings.Join(leftSections, "\n\n")
@@ -1055,28 +1204,73 @@ func buildBookshelfPanel() string {
 		end = len(books)
 	}
 	lines = append(lines, fmt.Sprintf("共 %d 本  |  排序 %s  |  过滤 %s  |  第 %d/%d 页", len(books), readableSort(app.sortMode), readableFilter(app.filterMode), start/pageSize+1, (len(books)+pageSize-1)/pageSize))
+	lines = append(lines, bookshelfStatsLine(books))
 	lines = append(lines, "")
-	titleWidth := 26
-	if mainPanel != nil && mainPanel.Inner.Dx() > 90 {
-		titleWidth = 34
-	}
-	lines = append(lines, fmt.Sprintf("    %-*s  %-6s  %-6s  %-8s", titleWidth, "书名", "格式", "进度", "状态"))
-	lines = append(lines, fmt.Sprintf("    %s", strings.Repeat("─", min(titleWidth+24, 56))))
+	titleWidth := bookshelfTitleWidth()
+	lines = append(lines, "  书名")
+	lines = append(lines, "  "+strings.Repeat("─", max(24, titleWidth)))
 	for i := start; i < end; i++ {
 		book := books[i]
 		prefix := "  "
 		if i == app.shelfIndex {
 			prefix = "> "
 		}
-		status := "未读"
-		if book.ProgressPercent >= 100 {
-			status = "已读"
-		} else if book.ProgressPos > 0 {
-			status = "在读"
-		}
-		lines = append(lines, fmt.Sprintf("%s%-*s  %-6s  %3d%%    %-8s", prefix, titleWidth, shorten(book.Title, titleWidth), strings.ToUpper(book.Format), book.ProgressPercent, status))
+		lines = append(lines, prefix+shortenDisplay(book.Title, titleWidth))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func bookshelfTitleWidth() int {
+	titleWidth := 28
+	if mainPanel != nil && mainPanel.Inner.Dx() > 0 {
+		available := mainPanel.Inner.Dx() - 4
+		if available > 18 {
+			titleWidth = available
+		}
+	}
+	if titleWidth < 18 {
+		titleWidth = 18
+	}
+	return titleWidth
+}
+
+func bookshelfStatsLine(books []lib.BookshelfBook) string {
+	unread := 0
+	reading := 0
+	finished := 0
+	for _, book := range books {
+		switch {
+		case book.ProgressPercent >= 100:
+			finished++
+		case book.ProgressPos > 0:
+			reading++
+		default:
+			unread++
+		}
+	}
+	return fmt.Sprintf("未读 %d  |  在读 %d  |  已读 %d", unread, reading, finished)
+}
+
+func shortenDisplay(text string, width int) string {
+	text = strings.TrimSpace(text)
+	if width <= 0 {
+		return ""
+	}
+	if runewidth.StringWidth(text) <= width {
+		return text
+	}
+	if width <= 1 {
+		return runewidth.Truncate(text, width, "")
+	}
+	return runewidth.Truncate(text, width, "…")
+}
+
+func padDisplay(text string, width int) string {
+	current := runewidth.StringWidth(text)
+	if current >= width {
+		return text
+	}
+	return text + strings.Repeat(" ", width-current)
 }
 
 func buildBookmarksPanel() string {
@@ -1104,7 +1298,13 @@ func buildBookmarksPanel() string {
 
 func bookshelfPageSize() int {
 	if mainPanel != nil && mainPanel.Inner.Dy() > 4 {
-		return mainPanel.Inner.Dy() - 4
+		// title + blank + summary + stats + blank + header + separator + bottom breathing room
+		reservedLines := 8
+		available := mainPanel.Inner.Dy() - reservedLines
+		if available < 3 {
+			return 3
+		}
+		return available
 	}
 	return 10
 }
@@ -1376,6 +1576,7 @@ func acceptSelectedImportHint() bool {
 }
 
 func resolveImportPath(value string) (string, bool) {
+	value = normalizeImportInputPath(value)
 	if strings.HasPrefix(value, "~") {
 		home, err := os.UserHomeDir()
 		if err == nil {
@@ -1387,6 +1588,40 @@ func resolveImportPath(value string) (string, bool) {
 		}
 	}
 	return value, false
+}
+
+func normalizeImportInputPath(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 {
+		if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
+			if unquoted, err := strconv.Unquote(value); err == nil {
+				return unquoted
+			}
+			value = strings.Trim(value, "\"")
+		}
+		if strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'") {
+			return strings.Trim(value, "'")
+		}
+	}
+
+	var b strings.Builder
+	escaped := false
+	for _, r := range value {
+		if escaped {
+			b.WriteRune(r)
+			escaped = false
+			continue
+		}
+		if r == '\\' {
+			escaped = true
+			continue
+		}
+		b.WriteRune(r)
+	}
+	if escaped {
+		b.WriteRune('\\')
+	}
+	return b.String()
 }
 
 func renderImportPath(resolved string, useTilde bool) string {
@@ -1685,32 +1920,138 @@ func importBook() {
 	}
 	resolved, _ := resolveImportPath(path)
 	path = resolved
-	if _, err := os.Stat(path); err != nil {
+	info, err := os.Stat(path)
+	if err != nil {
 		app.statusMessage = "文件不存在"
 		return
 	}
-	r, err := newReaderForPath(path)
+	if info.IsDir() {
+		app.statusMessage = importModeLabel() + "正在扫描目录..."
+		renderUIIfReady()
+		imported, err := importBooksFromDirectory(path, app.importRecursive)
+		switch {
+		case err != nil:
+			app.statusMessage = err.Error()
+		case imported == 0:
+			app.statusMessage = "目录中没有可导入的 txt/epub"
+		case imported == 1:
+			app.statusMessage = importModeLabel() + "已从目录导入 1 本书"
+		default:
+			app.statusMessage = fmt.Sprintf("%s已从目录导入 %d 本书", importModeLabel(), imported)
+		}
+		return
+	}
+
+	book, err := loadBookshelfBook(path)
 	if err != nil {
 		app.statusMessage = err.Error()
 		return
 	}
-	if err := r.Load(path); err != nil {
-		app.statusMessage = err.Error()
+	lib.UpsertBookshelfBook(app.bookshelf, book)
+	_ = lib.SaveBookshelf(app.bookshelf)
+	app.statusMessage = "已导入 " + filepath.Base(path)
+}
+
+func importBooksFromDirectory(root string, recursive bool) (int, error) {
+	paths, err := collectImportCandidates(root, recursive)
+	if err != nil {
+		return 0, err
+	}
+
+	total := len(paths)
+	imported := 0
+	for i, path := range paths {
+		app.statusMessage = fmt.Sprintf("%s正在导入 %d/%d: %s", importModeLabel(), i+1, total, shorten(filepath.Base(path), 24))
+		renderUIIfReady()
+
+		book, err := loadBookshelfBook(path)
+		if err != nil {
+			continue
+		}
+		lib.UpsertBookshelfBook(app.bookshelf, book)
+		imported++
+	}
+	_ = lib.SaveBookshelf(app.bookshelf)
+	return imported, nil
+}
+
+func collectImportCandidates(root string, recursive bool) ([]string, error) {
+	if recursive {
+		var paths []string
+		err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d == nil || d.IsDir() {
+				return nil
+			}
+			if !isSupportedBookFile(path) {
+				return nil
+			}
+			paths = append(paths, path)
+			return nil
+		})
+		return paths, err
+	}
+
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(root, entry.Name())
+		if !isSupportedBookFile(path) {
+			continue
+		}
+		paths = append(paths, path)
+	}
+	return paths, nil
+}
+
+func toggleImportRecursive() {
+	app.importRecursive = !app.importRecursive
+	if app.importRecursive {
+		app.statusMessage = "目录导入已切换为递归子目录"
 		return
 	}
-	book := lib.BookshelfBook{
+	app.statusMessage = "目录导入已切换为仅当前层"
+}
+
+func importModeLabel() string {
+	if app.importRecursive {
+		return "[递归] "
+	}
+	return "[当前层] "
+}
+
+func loadBookshelfBook(path string) (lib.BookshelfBook, error) {
+	r, err := newReaderForPath(path)
+	if err != nil {
+		return lib.BookshelfBook{}, err
+	}
+	if err := r.Load(path); err != nil {
+		return lib.BookshelfBook{}, err
+	}
+	return lib.BookshelfBook{
 		Path:            path,
-		Title:           strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)),
+		Title:           bookTitleForPath(path, r.BookTitle()),
 		Format:          strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), "."),
 		ProgressPos:     0,
 		ProgressTotal:   r.Total(),
 		ProgressPercent: 0,
 		CurrentChapter:  r.CurrentChapterTitle(),
 		LastReadAt:      time.Now().Format(time.RFC3339),
+	}, nil
+}
+
+func isSupportedBookFile(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".txt", ".epub":
+		return true
+	default:
+		return false
 	}
-	lib.UpsertBookshelfBook(app.bookshelf, book)
-	_ = lib.SaveBookshelf(app.bookshelf)
-	app.statusMessage = "已导入 " + filepath.Base(path)
 }
 
 func openSelectedBook() {

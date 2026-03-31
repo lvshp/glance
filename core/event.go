@@ -221,6 +221,10 @@ func handleTextInputEvent(id string, onEnter func()) {
 		if app.mode == modeImportInput {
 			completeImportPath()
 		}
+	case "<C-r>":
+		if app.mode == modeImportInput {
+			toggleImportRecursive()
+		}
 	case "<Enter>":
 		if app.mode == modeImportInput && acceptSelectedImportHint() {
 			return

@@ -46,8 +46,10 @@ type BookmarkStore struct {
 }
 
 const (
-	appName       = "readcli"
-	legacyAppName = "glance"
+	appName          = "readcli"
+	dataDirName      = ".readcli"
+	legacyRootDir    = "readcli"
+	legacyAppName    = "glance"
 )
 
 func configFilePath() (string, error) { return glanceDataPath("config.json") }
@@ -59,11 +61,27 @@ func bookmarksFilePath() (string, error) {
 }
 
 func glanceDataPath(name string) (string, error) {
-	configDir, err := os.UserConfigDir()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 
+	return filepath.Join(homeDir, dataDirName, name), nil
+}
+
+func legacyRootDataPath(name string) (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, legacyRootDir, name), nil
+}
+
+func legacyReadcliDataPath(name string) (string, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
 	return filepath.Join(configDir, appName, name), nil
 }
 
@@ -139,16 +157,27 @@ func loadJSON(pathFn func() (string, error), dest interface{}) error {
 
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		legacyPath, legacyErr := legacyGlanceDataPath(filepath.Base(path))
-		if legacyErr != nil {
-			return nil
+		legacyPaths := []func(string) (string, error){
+			legacyRootDataPath,
+			legacyReadcliDataPath,
+			legacyGlanceDataPath,
 		}
-		data, err = os.ReadFile(legacyPath)
+		for _, pathFn := range legacyPaths {
+			legacyPath, legacyErr := pathFn(filepath.Base(path))
+			if legacyErr != nil {
+				continue
+			}
+			data, err = os.ReadFile(legacyPath)
+			if os.IsNotExist(err) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			break
+		}
 		if os.IsNotExist(err) {
 			return nil
-		}
-		if err != nil {
-			return err
 		}
 	}
 	if err != nil {

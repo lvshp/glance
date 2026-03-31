@@ -27,6 +27,7 @@ type EpubReader struct {
 	chapters    []epubChapter
 	toc         string
 	chapterText []string
+	title       string
 }
 
 func (epub *EpubReader) Reflow(width int) {
@@ -47,6 +48,7 @@ type epubContainer struct {
 }
 
 type epubPackage struct {
+	Title    string
 	Manifest []struct {
 		ID         string `xml:"id,attr"`
 		Href       string `xml:"href,attr"`
@@ -107,6 +109,7 @@ func (epub *EpubReader) Load(filePath string) error {
 	if err != nil {
 		return err
 	}
+	epub.title = strings.TrimSpace(pkg.Title)
 
 	manifest := make(map[string]string, len(pkg.Manifest))
 	baseDir := path.Dir(opfPath)
@@ -182,6 +185,10 @@ func (epub *EpubReader) Load(filePath string) error {
 	epub.rebuildChapters(chapterTitles, epub.lineWidth)
 	epub.pos = startingChapterPosition(epub.chapters)
 	return nil
+}
+
+func (epub *EpubReader) BookTitle() string {
+	return strings.TrimSpace(epub.title)
 }
 
 func (epub *EpubReader) CurrentChapterTitle() string {
@@ -342,14 +349,14 @@ func (epub *EpubReader) rebuildChapters(titles []string, width int) {
 	chapters := make([]epubChapter, 0, len(epub.chapterText))
 
 	for i, chapterText := range epub.chapterText {
-		chapterLines := paginateContent(chapterText, width)
-		if len(chapterLines) == 0 {
-			continue
-		}
-
 		title := ""
 		if i < len(titles) {
 			title = titles[i]
+		}
+		chapterText = dedupeLeadingEpubTitle(chapterText, title)
+		chapterLines := paginateContent(chapterText, width)
+		if len(chapterLines) == 0 {
+			continue
 		}
 
 		chapters = append(chapters, epubChapter{
@@ -397,8 +404,27 @@ func readPackage(file *zip.File) (*epubPackage, error) {
 	if err := xml.Unmarshal(data, &pkg); err != nil {
 		return nil, err
 	}
+	pkg.Title = extractEPUBTitle(data)
 
 	return &pkg, nil
+}
+
+func extractEPUBTitle(data []byte) string {
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?is)<dc:title[^>]*>(.*?)</dc:title>`),
+		regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`),
+	}
+	for _, pattern := range patterns {
+		match := pattern.FindSubmatch(data)
+		if len(match) < 2 {
+			continue
+		}
+		title := strings.TrimSpace(stripMarkup(string(match[1])))
+		if title != "" {
+			return title
+		}
+	}
+	return ""
 }
 
 func readNavTOC(file *zip.File, navPath string) (map[string]string, error) {
@@ -567,6 +593,59 @@ func buildTOC(chapters []epubChapter) string {
 	}
 
 	return strings.TrimRight(builder.String(), "\n")
+}
+
+func dedupeLeadingEpubTitle(chapterText, title string) string {
+	if strings.TrimSpace(chapterText) == "" || strings.TrimSpace(title) == "" {
+		return chapterText
+	}
+
+	lines := strings.Split(chapterText, "\n")
+	normalizedTitle := normalizeChapterText(title)
+	if normalizedTitle == "" {
+		return chapterText
+	}
+
+	consumed := 0
+	for consumed < len(lines) && consumed < 6 {
+		line := strings.TrimSpace(lines[consumed])
+		if line == "" {
+			consumed++
+			continue
+		}
+		if !looksLikeTitleFragment(line, normalizedTitle) {
+			break
+		}
+		consumed++
+	}
+
+	if consumed == 0 {
+		return chapterText
+	}
+
+	result := []string{title}
+	for i := consumed; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		result = append(result, line)
+	}
+	return strings.Join(result, "\n")
+}
+
+func looksLikeTitleFragment(line, normalizedTitle string) bool {
+	normalizedLine := normalizeChapterText(line)
+	if normalizedLine == "" {
+		return true
+	}
+	if normalizedLine == normalizedTitle {
+		return true
+	}
+	if len([]rune(line)) > 40 {
+		return false
+	}
+	return strings.Contains(normalizedTitle, normalizedLine)
 }
 
 func shouldSkipChapter(chapterPath, title, chapterText string) bool {

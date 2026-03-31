@@ -34,11 +34,11 @@
 ## 本地开发
 
 ```bash
-git clone https://github.com/lvshp/glance.git
-cd glance
+git clone https://github.com/lvshp/ReadCLI.git
+cd ReadCLI
 go test ./...
-go build -o glance ./cmd
-./glance -n 8 /path/to/book.epub
+go build -o readcli ./cmd
+./readcli -n 8 /path/to/book.epub
 ```
 
 ## 发布说明

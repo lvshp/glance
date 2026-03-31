@@ -16,6 +16,10 @@ type contentReader struct {
 	lineWidth int
 }
 
+func (r *contentReader) BookTitle() string {
+	return ""
+}
+
 func (r *contentReader) Reflow(width int) {
 	if width <= 0 {
 		width = defaultLineWidth

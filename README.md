@@ -1,7 +1,7 @@
 # ReadCLI
 
-[![Release](https://img.shields.io/github/v/release/lvshp/glance?label=%E5%8F%91%E5%B8%83%E7%89%88)](https://github.com/lvshp/glance/releases)
-[![CI](https://img.shields.io/github/actions/workflow/status/lvshp/glance/go.yml?branch=main&label=CI)](https://github.com/lvshp/glance/actions/workflows/go.yml)
+[![Release](https://img.shields.io/github/v/release/lvshp/ReadCLI?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/lvshp/ReadCLI/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/lvshp/ReadCLI/go.yml?branch=main&label=CI)](https://github.com/lvshp/ReadCLI/actions/workflows/go.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
 ReadCLI 是一个终端小说阅读器和本地书架工具，主打三件事：
@@ -9,8 +9,6 @@ ReadCLI 是一个终端小说阅读器和本地书架工具，主打三件事：
 * 在终端里舒服地阅读 `TXT` / `EPUB`
 * 自动管理书架、阅读进度、书签和搜索
 * 用更像 IDE / 工作台的界面低调阅读
-
-当前仓库仍然托管在 `lvshp/glance`，但项目对外名称改为 `ReadCLI`，默认二进制名称改为 `readcli`。
 
 ## 这是什么
 
@@ -39,6 +37,7 @@ ReadCLI 是一个终端小说阅读器和本地书架工具，主打三件事：
 * 自动恢复上次阅读位置
 * 支持章节目录、上一章 / 下一章跳转
 * 支持全文搜索，`n / N` 跳转结果
+* 支持当前页搜索结果高亮
 * 支持书签保存、查看、删除、跳转
 * 支持按页滚动和自定义每页显示行数
 * 支持按终端宽度和中文字符显示宽度自适应折行
@@ -46,17 +45,22 @@ ReadCLI 是一个终端小说阅读器和本地书架工具，主打三件事：
 ### 书架能力
 
 * 无参数启动进入书架首页
-* 手动导入本地书籍
+* 支持单本导入和目录批量导入
+* 目录导入默认只扫描当前层，也可以切换为递归导入
 * 记录每本书的格式、章节、进度和最近阅读时间
 * 支持按最近阅读、导入时间、书名排序
 * 支持按格式和阅读状态过滤
 * 支持仅移出书架，或连本地文件一起删除
+* 书架主列表聚焦书名，右侧详情块展示格式、状态、进度、章节和最近阅读时间
+* 优先从正文或 EPUB 元数据提取书名，提取不到再回退到文件名
+* 自动清理常见来源尾巴，例如 `Z-Library`
 
 ### 交互与界面
 
 * 支持 `vscode`、`jetbrains`、`ops-console` 三套主题
 * 首页、阅读页、目录、书签页都有独立状态栏和操作提示
 * 导入路径支持光标移动、`Tab` 补全、候选选择和分页显示
+* 支持把文件或目录直接拖到导入输入框里自动识别路径
 * 同时兼容 Vim 键位和普通方向键
 * 支持 Boss Key 和自动翻页
 
@@ -79,7 +83,7 @@ ReadCLI 是一个终端小说阅读器和本地书架工具，主打三件事：
 
 发布版本与预编译包：
 
-* [Releases 页面](https://github.com/lvshp/glance/releases)
+* [Releases 页面](https://github.com/lvshp/ReadCLI/releases)
 
 当前已提供：
 
@@ -90,8 +94,8 @@ ReadCLI 是一个终端小说阅读器和本地书架工具，主打三件事：
 从源码构建：
 
 ```bash
-git clone https://github.com/lvshp/glance.git
-cd glance
+git clone https://github.com/lvshp/ReadCLI.git
+cd ReadCLI
 go build -o readcli ./cmd
 ```
 
@@ -99,6 +103,27 @@ go build -o readcli ./cmd
 
 ```bash
 readcli
+```
+
+如果你想全局直接使用 `readcli`，可以把二进制放到 `~/.local/bin`，并确保它在 `PATH` 里：
+
+```bash
+mkdir -p ~/.local/bin
+cp ./readcli ~/.local/bin/readcli
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+然后验证：
+
+```bash
+command -v readcli
+```
+
+正常情况下会输出类似：
+
+```bash
+/Users/your-name/.local/bin/readcli
 ```
 
 或者直接打开一本书：
@@ -142,6 +167,8 @@ readcli -n 8 /path/to/book.epub
 * `Backspace/Delete` 删除字符
 * `Tab` 路径补全
 * `↑/↓` 或继续按 `Tab` 选择候选
+* 支持把文件或目录直接拖进输入框
+* `Ctrl-r` 切换当前层导入 / 递归导入
 * `Enter` 先填入候选，再执行导入
 
 ## 键位说明
@@ -174,20 +201,18 @@ readcli -n 8 /path/to/book.epub
 
 ## 数据保存位置
 
-默认会把本地数据保存在系统配置目录下的 `readcli` 目录中，包括：
+默认会把本地数据保存在用户根目录下的隐藏目录 `.readcli` 中，包括：
 
 * `config.json`
 * `bookshelf.json`
 * `bookmarks.json`
 * `progress.json`
 
-在 macOS 上通常位于：
+默认位置在用户根目录下：
 
 ```bash
-~/Library/Application Support/readcli/
+~/.readcli/
 ```
-
-首次切换到 `ReadCLI` 时，会自动兼容读取旧的 `glance` 数据目录，避免你之前的书架、书签和阅读进度丢失。
 
 ## 项目定位
 
@@ -201,9 +226,6 @@ ReadCLI 现在的重点不是做一个“重型电子书管理器”，而是做
 
 后续更适合继续增强的方向包括：
 
-* 批量导入目录
-* 搜索结果高亮
-* 更强的书架视图
 * 更丰富的主题和伪装模式
 
 ## 开发与贡献

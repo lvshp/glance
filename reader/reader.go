@@ -3,6 +3,7 @@ package reader
 type Reader interface {
 	Load(path string) error
 	Reflow(width int)
+	BookTitle() string
 	Current() string
 	CurrentView(lines int) string
 	Total() int
