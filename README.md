@@ -1,43 +1,85 @@
-# Glance 维护版
+# ReadCLI
 
 [![Release](https://img.shields.io/github/v/release/lvshp/glance?label=%E5%8F%91%E5%B8%83%E7%89%88)](https://github.com/lvshp/glance/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/lvshp/glance/go.yml?branch=main&label=CI)](https://github.com/lvshp/glance/actions/workflows/go.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-<img src="https://github.com/TimothyYe/glance/blob/master/demo/glance.png?raw=true" width="120" />
+ReadCLI 是一个终端小说阅读器和本地书架工具，主打三件事：
 
-一个持续维护中的命令行小说阅读工具分支，主打 EPUB、进度恢复、终端自适应排版，以及更像 IDE 的摸鱼伪装界面。
+* 在终端里舒服地阅读 `TXT` / `EPUB`
+* 自动管理书架、阅读进度、书签和搜索
+* 用更像 IDE / 工作台的界面低调阅读
 
-适合这样的使用场景：
+当前仓库仍然托管在 `lvshp/glance`，但项目对外名称改为 `ReadCLI`，默认二进制名称改为 `readcli`。
 
-* 在终端里阅读 TXT / EPUB
-* 在工作环境下低调摸鱼
-* 想保留键盘流操作和轻量体验
-* 想要一个还在持续维护的 Glance 分支
+## 这是什么
 
-![](https://github.com/TimothyYe/glance/blob/master/demo/demo.gif?raw=true)
+和原始版本相比，这个项目已经不只是“打开一本 txt 往下翻”的小工具，而是更接近一个完整的终端阅读工作台：
 
-[English Version](#)
+* 无参数启动直接进入书架首页
+* 支持导入本地 `txt` / `epub`
+* 每本书单独保存阅读进度
+* 支持章节目录、章节切换、正文搜索和书签
+* 支持多主题伪装界面
+* 支持 Vim 风格键位和普通方向键两套操作方式
+
+适合这些场景：
+
+* 想在终端里读网文、小说、技术文档
+* 想保留键盘流和轻量体验
+* 想在办公环境里把界面伪装得更像开发工具
+* 想要一个还在持续维护的 `glance` 分支
+
+## 当前特性
+
+### 阅读能力
+
+* 支持 `TXT`
+* 支持 `EPUB`
+* 自动恢复上次阅读位置
+* 支持章节目录、上一章 / 下一章跳转
+* 支持全文搜索，`n / N` 跳转结果
+* 支持书签保存、查看、删除、跳转
+* 支持按页滚动和自定义每页显示行数
+* 支持按终端宽度和中文字符显示宽度自适应折行
+
+### 书架能力
+
+* 无参数启动进入书架首页
+* 手动导入本地书籍
+* 记录每本书的格式、章节、进度和最近阅读时间
+* 支持按最近阅读、导入时间、书名排序
+* 支持按格式和阅读状态过滤
+* 支持仅移出书架，或连本地文件一起删除
+
+### 交互与界面
+
+* 支持 `vscode`、`jetbrains`、`ops-console` 三套主题
+* 首页、阅读页、目录、书签页都有独立状态栏和操作提示
+* 导入路径支持光标移动、`Tab` 补全、候选选择和分页显示
+* 同时兼容 Vim 键位和普通方向键
+* 支持 Boss Key 和自动翻页
 
 ## Fork 说明
 
 这个仓库基于原项目 [TimothyYe/glance](https://github.com/TimothyYe/glance) 修改而来。
 
-我在保留原项目协议与致谢的基础上，继续维护并补充了以下能力：
+这个维护分支保留了原项目的许可证、致谢和基础理念，并在此基础上继续演进。当前新增和增强的方向主要包括：
 
-* EPUB 支持
-* EPUB 章节目录与目录跳转
-* 自动记忆阅读进度并恢复
-* 多行显示与按页翻页
-* 按终端宽度自适应折行
-* 更偏 IDE / 工作台风格的伪装界面
+* EPUB 阅读与章节导航
+* 本地书架和进度持久化
+* 搜索、书签、多行阅读和按页滚动
+* 中文排版与终端宽度自适应
+* 更完整的 IDE / 工作台伪装 UI
 
-## 下载
+如果你想使用原项目，可以前往：
+[https://github.com/TimothyYe/glance](https://github.com/TimothyYe/glance)
+
+## 下载与安装
 
 发布版本与预编译包：
 
 * [Releases 页面](https://github.com/lvshp/glance/releases)
-* [v0.1.0 首个维护版发布](https://github.com/lvshp/glance/releases/tag/v0.1.0)
 
 当前已提供：
 
@@ -45,105 +87,134 @@
 * macOS amd64
 * Linux amd64
 
-## 功能亮点
-
-* 使用Go开发，无需额外运行时和依赖库。
-* 软件运行于命令行，对Vimer友好，支持Vim方式的Key Binding进行翻页和跳转。
-* 支持Boss Key，方便紧急情况下对界面隐藏和伪装。
-* 支持自动定时翻页模式
-
-## 维护版增强
-
-相比原项目，这个维护版本重点增强了下面几块：
-
-* EPUB 支持与章节目录导航
-* 记忆阅读进度与自动恢复
-* 多行显示、按页滚动、数字跳章
-* 按终端宽度与中文显示宽度自适应排版
-* IDE 风格工作台界面，更适合伪装成开发环境
-* 多平台 Release 附件与自动发布流程
-
-## 安装步骤
-
-如果你使用的是这个维护版本，可以直接下载 Release 附件，或者从源码构建：
+从源码构建：
 
 ```bash
 git clone https://github.com/lvshp/glance.git
 cd glance
-go build -o glance ./cmd
-./glance -n 8 /path/to/book.epub
+go build -o readcli ./cmd
 ```
 
-如果你已经把可执行文件放进 `PATH`，也可以直接：
+如果你已经把可执行文件放到 `PATH` 中，可以直接使用：
 
 ```bash
-glance -n 8 /path/to/book.epub
+readcli
 ```
 
-原项目安装方式如下：
+或者直接打开一本书：
 
 ```bash
-brew tap timothyye/tap
-brew install timothyye/tap/glance
+readcli /path/to/book.epub
+readcli /path/to/book.txt
 ```
 
-注: 也可以选择[直接下载](https://github.com/TimothyYe/glance/releases)可执行文件并运行。
+## 快速开始
 
-## 支持平台
-* Mac OS
-* Linux
-* Windows (计划中)
+### 1. 打开书架
 
-## 支持格式
-* TXT (已支持)
-* PDF (计划中)
-* EPUB (已支持)
+```bash
+readcli
+```
 
-## 快捷键说明
+进入书架首页后：
 
-* `?` 显示与隐藏帮助菜单
-* `q` 或者 `ctrl+c` 退出程序
-* `j`, `ctrl+n`, `<Space>` 或者 `<Enter>` 按当前显示行数向下翻一页
-* `k` 或者 `ctrl+p` 按当前显示行数向上翻一页
-* `+` / `-` 增加或减少同时显示的正文行数
-* `[` 跳转到上一章（EPUB）
-* `]` 跳转到下一章（EPUB）
-* `m` 显示与隐藏目录（EPUB，目录中可用 `j/k` 选择、数字加 `Enter` 跳转，`*` 为当前章节）
-* `p` 显示与隐藏当前阅读进度
-* `b` Boss Key，隐藏当前内容并显示伪装Shell提示符
-* `f` 显示与隐藏边框
-* `c` 切换显示字体颜色
+* `i` 导入本地书籍
+* `↑/↓` 或 `j/k` 选择书籍
+* `→` 或 `Enter` 打开
 
-## 跳转命令
+### 2. 直接打开一本书
 
-Glance支持与Vim相同的快捷跳转命令，方便在阅读时快速定位以及跳转到想要阅读的位置。例如:
+```bash
+readcli -n 8 /path/to/book.epub
+```
 
-* `G` 跳转到最后一行  
-* `50G` 跳转到第50行
-* `gg` 跳转到第一行
-* `20j` 向下跳转20行
-* `30k` 向上跳转30行
+这会：
 
-## 开发环境集成展示
+* 自动把书加入书架
+* 按上次位置恢复阅读
+* 以每页 `8` 行的方式显示正文
 
-Glance可以运行在任何支持Terminal的开发软件及环境中，包括并不仅限于JetBrains全家桶, Vim, Tmux, Emacs……
+### 3. 导入本地文件
 
-* GoLand
-![](https://github.com/TimothyYe/glance/blob/master/demo/goland.png?raw=true)
+导入界面支持：
 
-* Spacemacs
-![](https://github.com/TimothyYe/glance/blob/master/demo/spacemacs.png?raw=true)
+* `←/→` 移动光标
+* `Backspace/Delete` 删除字符
+* `Tab` 路径补全
+* `↑/↓` 或继续按 `Tab` 选择候选
+* `Enter` 先填入候选，再执行导入
 
-* VSCode
-![](https://github.com/TimothyYe/glance/blob/master/demo/vscode.png?raw=true)
+## 键位说明
 
-* Tmux
-![](https://github.com/TimothyYe/glance/blob/master/demo/tmux.png?raw=true)
+按 `?` 可以打开内置帮助页。当前支持两套操作方式。
 
-## Issue 与 PR
+### 书架首页
 
-欢迎基于这个维护版本提交 issue 与 PR。
+* Vim 风格：`j/k` 移动，`Enter` 打开，`i` 导入，`o/r` 排序过滤，`x` 移除
+* 普通键位：`↑/↓` 移动，`→` 或 `Enter` 打开
+
+### 阅读界面
+
+* Vim 风格：`j/k` 翻页，`[` / `]` 切章，`/` 搜索，`n/N` 跳转结果，`s/B` 书签，`m` 目录
+* 普通键位：`↑/↓` 翻页，`←/→` 切章
+
+### 目录 / 书签
+
+* Vim 风格：`j/k` 移动，`Enter` 打开
+* 普通键位：`↑/↓` 移动，`→` 或 `Enter` 打开，`←` 返回
+
+### 通用操作
+
+* `+ / -` 调整每页显示行数
+* `T` 切换主题
+* `p` 查看阅读进度
+* `b` 触发 Boss Key
+* `f` 显示或隐藏边框
+* `q` 返回书架或退出程序
+
+## 数据保存位置
+
+默认会把本地数据保存在系统配置目录下的 `readcli` 目录中，包括：
+
+* `config.json`
+* `bookshelf.json`
+* `bookmarks.json`
+* `progress.json`
+
+在 macOS 上通常位于：
+
+```bash
+~/Library/Application Support/readcli/
+```
+
+首次切换到 `ReadCLI` 时，会自动兼容读取旧的 `glance` 数据目录，避免你之前的书架、书签和阅读进度丢失。
+
+## 项目定位
+
+ReadCLI 现在的重点不是做一个“重型电子书管理器”，而是做一个：
+
+* 启动快
+* 终端原生
+* 键盘友好
+* 足够好看
+* 足够适合日常摸鱼阅读
+
+后续更适合继续增强的方向包括：
+
+* 批量导入目录
+* 搜索结果高亮
+* 更强的书架视图
+* 更丰富的主题和伪装模式
+
+## 开发与贡献
+
+欢迎提交 issue 和 PR。
+
+相关文档：
+
+* [CHANGELOG](./CHANGELOG.md)
+* [CONTRIBUTING](./CONTRIBUTING.md)
 
 ## 协议
 
-本项目基于原项目继续演进，并继续遵循 [Apache License 2.0](./LICENSE)。
+本项目继续遵循 [Apache License 2.0](./LICENSE)。

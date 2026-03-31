@@ -1,22 +1,23 @@
 # Release Notes
 
-## Fork Overview
+## Release Title Rule
 
-This repository is a maintained fork of `TimothyYe/glance`.
+后续发版统一使用纯版本号作为 Release 标题，例如：
 
-The fork keeps the original Apache 2.0 license and extends the project with:
+* `v0.1.1`
+* `v0.2.0`
+* `v1.0.0`
 
-- EPUB reading support
-- Chapter TOC and chapter navigation
-- Saved reading progress and auto resume
-- Multi-line page view and page scrolling
-- Terminal-width-aware text reflow
-- IDE-like camouflage UI for low-key reading in terminal sessions
+不再额外追加“维护版发布”“首次发布”“ReadCLI 发布”等描述。
 
-## Suggested First Release Title
+## Release Naming
 
-`glance-fork: epub support, saved progress, and IDE-style camouflage UI`
+建议保持以下约定：
 
-## Suggested Repository Description
+* Git tag：`vX.Y.Z`
+* GitHub Release 标题：`vX.Y.Z`
+* 二进制和压缩包文件名：保留版本号，例如 `readcli-darwin-arm64-v0.2.0.tar.gz`
 
-`A maintained fork of Glance with EPUB support, saved progress, TOC navigation, and an IDE-style terminal reading UI.`
+## Fork Note
+
+仓库仍然基于 [TimothyYe/glance](https://github.com/TimothyYe/glance) 持续演进，Release 标题简化不会影响 fork 说明、许可证和致谢信息的保留。

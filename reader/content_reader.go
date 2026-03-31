@@ -52,6 +52,45 @@ func (r *contentReader) CurrentView(lines int) string {
 	return strings.Join(r.content[r.pos:end], "\n")
 }
 
+func (r *contentReader) Total() int {
+	return len(r.content)
+}
+
+func (r *contentReader) Search(query string, start int, forward bool) (int, bool) {
+	if len(r.content) == 0 {
+		return 0, false
+	}
+
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return 0, false
+	}
+
+	if start < 0 {
+		start = 0
+	}
+	if start >= len(r.content) {
+		start = len(r.content) - 1
+	}
+
+	if forward {
+		for i := start; i < len(r.content); i++ {
+			if strings.Contains(strings.ToLower(r.content[i]), query) {
+				return i, true
+			}
+		}
+		return 0, false
+	}
+
+	for i := start; i >= 0; i-- {
+		if strings.Contains(strings.ToLower(r.content[i]), query) {
+			return i, true
+		}
+	}
+
+	return 0, false
+}
+
 func (r *contentReader) Next() string {
 	if len(r.content) == 0 {
 		return ""

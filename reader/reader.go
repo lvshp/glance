@@ -5,6 +5,8 @@ type Reader interface {
 	Reflow(width int)
 	Current() string
 	CurrentView(lines int) string
+	Total() int
+	Search(query string, start int, forward bool) (int, bool)
 	Next() string
 	Prev() string
 	First() string

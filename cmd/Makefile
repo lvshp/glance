@@ -1,5 +1,5 @@
 # Binary name
-BINARY=glance
+BINARY=readcli
 # Builds the project
 build:
 		GO111MODULE=on go build -o ${BINARY} -ldflags "-X main.Version=${VERSION}"

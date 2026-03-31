@@ -11,12 +11,11 @@ type ProgressStore struct {
 }
 
 func progressFilePath() (string, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
+	return filepath.Join(mustUserConfigDir(), appName, "progress.json"), nil
+}
 
-	return filepath.Join(configDir, "glance", "progress.json"), nil
+func legacyProgressFilePath() (string, error) {
+	return filepath.Join(mustUserConfigDir(), legacyAppName, "progress.json"), nil
 }
 
 func LoadProgress() (*ProgressStore, error) {
@@ -27,7 +26,13 @@ func LoadProgress() (*ProgressStore, error) {
 
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		return &ProgressStore{Books: make(map[string]int)}, nil
+		legacyPath, legacyErr := legacyProgressFilePath()
+		if legacyErr == nil {
+			data, err = os.ReadFile(legacyPath)
+		}
+		if os.IsNotExist(err) {
+			return &ProgressStore{Books: make(map[string]int)}, nil
+		}
 	}
 	if err != nil {
 		return nil, err
@@ -68,4 +73,12 @@ func SaveProgress(store *ProgressStore) error {
 	}
 
 	return os.WriteFile(path, data, 0644)
+}
+
+func mustUserConfigDir() string {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "."
+	}
+	return configDir
 }

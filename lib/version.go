@@ -5,8 +5,8 @@ import "fmt"
 var (
 	// Logo
 	Logo = `
-Glance V%s
-https://github.com/TimothyYe/glance
+ReadCLI V%s
+https://github.com/lvshp/glance
 `
 )
 
