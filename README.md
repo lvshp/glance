@@ -1,7 +1,7 @@
 # Glance 维护版
 
 [![Release](https://img.shields.io/github/v/release/lvshp/glance?label=%E5%8F%91%E5%B8%83%E7%89%88)](https://github.com/lvshp/glance/releases)
-[![CI](https://img.shields.io/github/actions/workflow/status/lvshp/glance/go.yml?branch=master&label=CI)](https://github.com/lvshp/glance/actions/workflows/go.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/lvshp/glance/go.yml?branch=main&label=CI)](https://github.com/lvshp/glance/actions/workflows/go.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
 <img src="https://github.com/TimothyYe/glance/blob/master/demo/glance.png?raw=true" width="120" />
