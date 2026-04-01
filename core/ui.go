@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -23,16 +24,35 @@ import (
 type mode string
 
 const (
-	modeHome          mode = "home"
-	modeReading       mode = "reading"
-	modeTOC           mode = "toc"
-	modeBookmarks     mode = "bookmarks"
-	modeSearchInput   mode = "search_input"
-	modeImportInput   mode = "import_input"
-	modeReadingSettings mode = "reading_settings"
+	modeHome              mode = "home"
+	modeReading           mode = "reading"
+	modeTOC               mode = "toc"
+	modeBookmarks         mode = "bookmarks"
+	modeSearchInput       mode = "search_input"
+	modeImportInput       mode = "import_input"
+	modeReadingSettings   mode = "reading_settings"
 	modeReadingColorInput mode = "reading_color_input"
-	modeDeleteConfirm mode = "delete_confirm"
+	modeDeleteConfirm     mode = "delete_confirm"
+	modeUpdatePrompt      mode = "update_prompt"
+	modeUpdating          mode = "updating"
+	modeUpdateRestart     mode = "update_restart"
 )
+
+type updateMessageKind string
+
+const (
+	updateAvailable updateMessageKind = "available"
+	updateInstalled updateMessageKind = "installed"
+	updateFailed    updateMessageKind = "failed"
+	updateCurrent   updateMessageKind = "current"
+)
+
+type updateMessage struct {
+	Kind    updateMessageKind
+	Release *lib.ReleaseInfo
+	Err     error
+	Manual  bool
+}
 
 type theme struct {
 	Name       string
@@ -93,9 +113,14 @@ type appState struct {
 	rowNumber     string
 	settingsIndex int
 
-	deleteTargetPath  string
-	deleteTargetTitle string
-	loadingBookPath   string
+	deleteTargetPath   string
+	deleteTargetTitle  string
+	loadingBookPath    string
+	currentVersion     string
+	updateRelease      *lib.ReleaseInfo
+	updateReturnMode   mode
+	updateMessages     chan updateMessage
+	updatePromptManual bool
 
 	lastHomePath string
 	quit         bool
@@ -181,7 +206,7 @@ func currentTheme() theme {
 	return themes["vscode"]
 }
 
-func Run(initialFile string, requestedLines int) {
+func Run(initialFile string, requestedLines int, version string) {
 	cfg, _ := lib.LoadConfig()
 	shelf, _ := lib.LoadBookshelf()
 	marks, _ := lib.LoadBookmarks()
@@ -216,6 +241,8 @@ func Run(initialFile string, requestedLines int) {
 		sessionStart:    time.Now(),
 		showBorder:      cfg.ShowBorder,
 		displayLines:    cfg.DisplayLines,
+		currentVersion:  strings.TrimSpace(version),
+		updateMessages:  make(chan updateMessage, 2),
 	}
 
 	if app.bookshelf == nil {
@@ -246,6 +273,8 @@ func Run(initialFile string, requestedLines int) {
 			app.mode = modeHome
 		}
 	}
+
+	startUpdateCheck(false)
 
 	renderUI()
 	handleEvents()
@@ -531,9 +560,9 @@ func openBook(path string) error {
 	} else if legacyChapterTitle != "" {
 		if chapterIndex := reader.FindChapterIndexByTitle(app.reader, legacyChapterTitle); chapterIndex >= 0 {
 			reader.RestoreFromAnchor(app.reader, reader.ProgressAnchor{
-				ChapterIndex: chapterIndex,
+				ChapterIndex:  chapterIndex,
 				ChapterOffset: 0,
-				Pos:          0,
+				Pos:           0,
 			})
 		}
 	}
@@ -870,6 +899,121 @@ func renderUI() {
 	ui.Render(drawables...)
 }
 
+func startUpdateCheck(manual bool) {
+	if app == nil || app.updateMessages == nil {
+		return
+	}
+	if app.currentVersion == "" || !lib.CurrentPlatformSupported() {
+		if manual {
+			app.statusMessage = "当前版本不支持自动更新"
+		}
+		return
+	}
+	go func(version string, skipped string, manual bool) {
+		release, err := lib.FetchLatestRelease(version)
+		if err != nil || release == nil {
+			if manual {
+				app.updateMessages <- updateMessage{
+					Kind:   updateFailed,
+					Err:    err,
+					Manual: true,
+				}
+			}
+			return
+		}
+		if !lib.ShouldOfferUpdate(version, release.TagName) {
+			if manual {
+				app.updateMessages <- updateMessage{
+					Kind:   updateCurrent,
+					Manual: true,
+				}
+			}
+			return
+		}
+		if !manual && strings.TrimSpace(skipped) == strings.TrimSpace(release.TagName) {
+			return
+		}
+		app.updateMessages <- updateMessage{
+			Kind:    updateAvailable,
+			Release: release,
+			Manual:  manual,
+		}
+	}(app.currentVersion, app.config.SkippedUpdateVersion, manual)
+}
+
+func handleUpdateMessage(message updateMessage) {
+	switch message.Kind {
+	case updateAvailable:
+		if message.Release == nil {
+			return
+		}
+		app.updateRelease = message.Release
+		app.updatePromptManual = message.Manual
+		if app.mode != modeUpdating && app.mode != modeUpdateRestart {
+			app.updateReturnMode = app.mode
+			app.mode = modeUpdatePrompt
+		}
+		app.statusMessage = "发现新版本 " + message.Release.TagName
+	case updateInstalled:
+		if message.Release != nil {
+			app.updateRelease = message.Release
+		}
+		if app.config != nil {
+			app.config.SkippedUpdateVersion = ""
+			_ = lib.SaveConfig(app.config)
+		}
+		app.mode = modeUpdateRestart
+		app.statusMessage = "更新已安装，退出后重新启动生效"
+	case updateFailed:
+		app.mode = app.updateReturnMode
+		if message.Err != nil {
+			app.statusMessage = "更新失败: " + shorten(message.Err.Error(), 48)
+		} else {
+			app.statusMessage = "更新失败"
+		}
+	case updateCurrent:
+		app.statusMessage = "当前已经是最新版本"
+	}
+}
+
+func triggerManualUpdateCheck() {
+	if app == nil {
+		return
+	}
+	app.statusMessage = "正在检查更新..."
+	renderUIIfReady()
+	startUpdateCheck(true)
+}
+
+func startUpdateInstall() {
+	if app == nil || app.updateRelease == nil || app.updateMessages == nil {
+		return
+	}
+	executablePath, err := os.Executable()
+	if err != nil {
+		app.statusMessage = "无法定位当前程序"
+		return
+	}
+	asset := lib.SelectReleaseAsset(app.updateRelease, runtime.GOOS, runtime.GOARCH)
+	if asset == nil {
+		app.statusMessage = "当前平台暂无可用更新包"
+		return
+	}
+
+	app.mode = modeUpdating
+	app.statusMessage = "正在安装更新 " + app.updateRelease.TagName
+	renderUIIfReady()
+
+	go func(version string, release *lib.ReleaseInfo, downloadURL, exePath string) {
+		err := lib.InstallLatestReleaseAsset(version, downloadURL, exePath)
+		if err != nil {
+			app.updateMessages <- updateMessage{Kind: updateFailed, Err: err}
+			return
+		}
+		app.updateMessages <- updateMessage{Kind: updateInstalled, Release: release}
+	}(app.currentVersion, app.updateRelease, asset.BrowserDownloadURL, executablePath)
+}
+
 func renderUIIfReady() {
 	if header == nil || mainPanel == nil || footer == nil {
 		return
@@ -975,6 +1119,7 @@ func buildLeftPanel(th theme) string {
 			"  r       过滤视图",
 			"  x       移出书架",
 			"  T       切换主题",
+			"  u       检查更新",
 			"",
 			"[Sort](fg:yellow,mod:bold)",
 			"  " + readableSort(app.sortMode),
@@ -1011,6 +1156,7 @@ func buildLeftPanel(th theme) string {
 		"  c 切换颜色",
 		"  , 阅读设置",
 		"  T 切主题",
+		"  u 检查更新",
 		"",
 		"[Current Focus](fg:green,mod:bold)",
 		"  " + shorten(currentChapter, 14),
@@ -1150,14 +1296,18 @@ func emptyFallback(value, fallback string) string {
 func buildFooter() string {
 	elapsed := time.Since(app.sessionStart).Round(time.Minute)
 	tag := currentTheme().FooterTag
-	line1 := fmt.Sprintf("[%s](fg:black,bg:green,mod:bold)  utf-8  session [%s](fg:yellow)  theme [%s](fg:cyan)  status [%s](fg:green)",
-		tag, elapsed, app.config.Theme, shorten(app.statusMessage, 28))
+	version := strings.TrimSpace(app.currentVersion)
+	if version == "" {
+		version = "dev"
+	}
+	line1 := fmt.Sprintf("[%s](fg:black,bg:green,mod:bold)  utf-8  session [%s](fg:yellow)  theme [%s](fg:cyan)  version [%s](fg:yellow)  status [%s](fg:green)",
+		tag, elapsed, app.config.Theme, version, shorten(app.statusMessage, 22))
 	line2 := fmt.Sprintf("status: [%s](fg:cyan)", shorten(app.statusMessage, 72))
 	switch app.mode {
 	case modeHome:
-		return line1 + "\n[↑/↓](fg:cyan):选择  [→/Enter](fg:cyan):打开  [i](fg:cyan):导入  [o/r](fg:cyan):排序/过滤  [x](fg:cyan):移除  [T](fg:cyan):主题  [q](fg:red):退出"
+		return line1 + "\n[↑/↓](fg:cyan):选择  [→/Enter](fg:cyan):打开  [i](fg:cyan):导入  [o/r](fg:cyan):排序/过滤  [x](fg:cyan):移除  [T](fg:cyan):主题  [u](fg:cyan):更新  [q](fg:red):退出"
 	case modeReading:
-		return line1 + "\n[↑/↓](fg:cyan):翻页  [←/→](fg:cyan):切章  [+/-](fg:cyan):正文行数  [c](fg:cyan):颜色  [,](fg:cyan):阅读设置  [/](fg:cyan):搜索  [s/B](fg:cyan):书签  [m](fg:cyan):目录  [T](fg:cyan):主题  [q](fg:red):书架"
+		return line1 + "\n[↑/↓](fg:cyan):翻页  [←/→](fg:cyan):切章  [+/-](fg:cyan):正文行数  [c](fg:cyan):颜色  [,](fg:cyan):阅读设置  [/](fg:cyan):搜索  [s/B](fg:cyan):书签  [m](fg:cyan):目录  [T](fg:cyan):主题  [u](fg:cyan):更新  [q](fg:red):书架"
 	case modeTOC:
 		return line1 + "\n[↑/↓](fg:cyan):移动  [→/Enter](fg:cyan):打开  [←/m](fg:cyan):返回  [0-9](fg:cyan):跳章  [q](fg:red):书架"
 	case modeBookmarks:
@@ -1176,6 +1326,12 @@ func buildFooter() string {
 		return line1 + "\n输入字体颜色，支持 #RRGGBB / #RGB / R,G,B，Enter 保存，Esc 取消"
 	case modeDeleteConfirm:
 		return line1 + "\n[y](fg:cyan):仅移出书架  [D](fg:red):删除本地文件  [Esc](fg:yellow):取消"
+	case modeUpdatePrompt:
+		return line1 + "\n[y/Enter](fg:cyan):开始更新  [n/Esc](fg:yellow):稍后再说"
+	case modeUpdating:
+		return line1 + "\n正在下载安装新版本，请稍候…"
+	case modeUpdateRestart:
+		return line1 + "\n[Enter](fg:cyan):退出并手动重新启动  [q](fg:red):直接退出"
 	default:
 		return line1 + "\n" + line2
 	}
@@ -1193,6 +1349,8 @@ func buildMainTitle() string {
 		return " reading settings "
 	case modeReadingColorInput:
 		return " reading color "
+	case modeUpdatePrompt, modeUpdating, modeUpdateRestart:
+		return " update "
 	default:
 		return " editor: " + currentDisplayName() + " "
 	}
@@ -1245,6 +1403,12 @@ func buildMainPanel() string {
 		return buildReadingSettingsPanel()
 	case modeReadingColorInput:
 		return "阅读颜色\n\n请输入字体颜色：\n\n" + renderInputWithCursor(app.inputValue, app.inputCursor) + "\n\n支持 #RRGGBB、#RGB 或 R,G,B。"
+	case modeUpdatePrompt:
+		return buildUpdatePromptPanel()
+	case modeUpdating:
+		return buildUpdatingPanel()
+	case modeUpdateRestart:
+		return buildUpdateRestartPanel()
 	default:
 		if app.showHelp {
 			return buildHelpPanel()
@@ -1260,6 +1424,68 @@ func buildMainPanel() string {
 		}
 		return formatReadingPanel(highlightSearchMatches(app.reader.CurrentView(readingVisibleSourceLines()), app.searchQuery))
 	}
+}
+
+func buildUpdatePromptPanel() string {
+	if app.updateRelease == nil {
+		return "没有可用更新。"
+	}
+	body := strings.TrimSpace(app.updateRelease.Body)
+	if body == "" {
+		body = "本次版本未提供额外说明。"
+	}
+	lines := []string{
+		"发现新版本",
+		"",
+		fmt.Sprintf("当前版本：%s", emptyFallback(strings.TrimSpace(app.currentVersion), "未知")),
+		fmt.Sprintf("最新版本：%s", app.updateRelease.TagName),
+		"",
+		"是否现在下载并替换当前程序？",
+		"更新完成后退出，再重新启动即可生效。",
+		"",
+		"更新说明：",
+	}
+	for _, line := range wrapDisplayLines(body, max(28, mainPanel.Inner.Dx()-4)) {
+		lines = append(lines, "  "+line)
+	}
+	lines = append(lines, "", "按 y / Enter 开始更新，按 n / Esc 稍后再说。")
+	if !app.updatePromptManual {
+		lines = append(lines, "如果这次选择不更新，之后启动时不会再提醒这个版本。")
+	} else {
+		lines = append(lines, "这是手动检查更新，不会受之前的忽略记录影响。")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func buildUpdatingPanel() string {
+	version := "最新版本"
+	if app.updateRelease != nil && app.updateRelease.TagName != "" {
+		version = app.updateRelease.TagName
+	}
+	return strings.Join([]string{
+		"正在安装更新",
+		"",
+		"目标版本：" + version,
+		"",
+		"ReadCLI 正在从 GitHub Releases 下载并替换当前程序。",
+		"更新完成后会提示你退出并重新启动生效。",
+	}, "\n")
+}
+
+func buildUpdateRestartPanel() string {
+	version := "新版本"
+	if app.updateRelease != nil && app.updateRelease.TagName != "" {
+		version = app.updateRelease.TagName
+	}
+	return strings.Join([]string{
+		"更新已安装",
+		"",
+		"已完成热更新：" + version,
+		"",
+		"请退出当前程序，然后重新启动 ReadCLI。",
+		"",
+		"按 Enter 退出。",
+	}, "\n")
 }
 
 func readingContentWidth(mainWidth int) int {
@@ -1376,15 +1602,15 @@ func buildHelpPanel() string {
 	rightTitle := "[方向键 / 普通键](fg:yellow,mod:bold)"
 
 	leftSections := []string{
-		"[书架首页](fg:green,mod:bold)\n  j/k 移动\n  Enter 打开\n  i 导入\n  o/r 排序过滤\n  x 移除",
-		"[阅读界面](fg:green,mod:bold)\n  j/k 翻页\n  [ / ] 切章\n  / 搜索\n  n/N 结果跳转\n  s/B 书签\n  m 目录\n  , 阅读设置",
+		"[书架首页](fg:green,mod:bold)\n  j/k 移动\n  Enter 打开\n  i 导入\n  o/r 排序过滤\n  x 移除\n  u 检查更新",
+		"[阅读界面](fg:green,mod:bold)\n  j/k 翻页\n  [ / ] 切章\n  / 搜索\n  n/N 结果跳转\n  s/B 书签\n  m 目录\n  , 阅读设置\n  u 检查更新",
 		"[目录 / 书签](fg:green,mod:bold)\n  j/k 移动\n  Enter 打开\n  m 或 B 返回",
 		"[通用](fg:green,mod:bold)\n  +/- 调整行数\n  T 切换主题\n  q 返回书架或退出",
 	}
 
 	rightSections := []string{
-		"[书架首页](fg:magenta,mod:bold)\n  ↑/↓ 选择\n  → 或 Enter 打开",
-		"[阅读界面](fg:magenta,mod:bold)\n  ↑/↓ 翻页\n  ←/→ 切章\n  , 阅读设置",
+		"[书架首页](fg:magenta,mod:bold)\n  ↑/↓ 选择\n  → 或 Enter 打开\n  u 检查更新",
+		"[阅读界面](fg:magenta,mod:bold)\n  ↑/↓ 翻页\n  ←/→ 切章\n  , 阅读设置\n  u 检查更新",
 		"[目录 / 书签](fg:magenta,mod:bold)\n  ↑/↓ 移动\n  → 或 Enter 打开\n  ← 返回",
 		"[导入输入](fg:magenta,mod:bold)\n  ←/→ 移动光标\n  ↑/↓ 选择候选\n  Tab 补全\n  拖入文件/目录自动取路径\n  Ctrl-r 切换递归\n  Enter 填入或导入\n  Esc 取消",
 	}

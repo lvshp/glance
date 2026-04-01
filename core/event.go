@@ -10,37 +10,47 @@ import (
 func handleEvents() {
 	uiEvents := ui.PollEvents()
 	for !app.quit {
-		e := <-uiEvents
+		select {
+		case e := <-uiEvents:
+			if e.ID == "<Resize>" {
+				payload := e.Payload.(ui.Resize)
+				applyLayout(payload.Width, payload.Height)
+				renderUI()
+				continue
+			}
 
-		if e.ID == "<Resize>" {
-			payload := e.Payload.(ui.Resize)
-			applyLayout(payload.Width, payload.Height)
+			switch app.mode {
+			case modeHome:
+				handleHomeEvent(e.ID)
+			case modeReading:
+				handleReadingEvent(e.ID)
+			case modeTOC:
+				handleTOCEvent(e.ID)
+			case modeBookmarks:
+				handleBookmarkEvent(e.ID)
+			case modeSearchInput:
+				handleTextInputEvent(e.ID, runSearch)
+			case modeImportInput:
+				handleTextInputEvent(e.ID, importBook)
+			case modeReadingSettings:
+				handleReadingSettingsEvent(e.ID)
+			case modeReadingColorInput:
+				handleTextInputEvent(e.ID, applyReadingTextColorInput)
+			case modeDeleteConfirm:
+				handleDeleteConfirmEvent(e.ID)
+			case modeUpdatePrompt:
+				handleUpdatePromptEvent(e.ID)
+			case modeUpdating:
+				handleUpdatingEvent(e.ID)
+			case modeUpdateRestart:
+				handleUpdateRestartEvent(e.ID)
+			}
+
 			renderUI()
-			continue
+		case message := <-app.updateMessages:
+			handleUpdateMessage(message)
+			renderUI()
 		}
-
-		switch app.mode {
-		case modeHome:
-			handleHomeEvent(e.ID)
-		case modeReading:
-			handleReadingEvent(e.ID)
-		case modeTOC:
-			handleTOCEvent(e.ID)
-		case modeBookmarks:
-			handleBookmarkEvent(e.ID)
-		case modeSearchInput:
-			handleTextInputEvent(e.ID, runSearch)
-		case modeImportInput:
-			handleTextInputEvent(e.ID, importBook)
-		case modeReadingSettings:
-			handleReadingSettingsEvent(e.ID)
-		case modeReadingColorInput:
-			handleTextInputEvent(e.ID, applyReadingTextColorInput)
-		case modeDeleteConfirm:
-			handleDeleteConfirmEvent(e.ID)
-		}
-
-		renderUI()
 	}
 }
 
@@ -66,6 +76,8 @@ func handleHomeEvent(id string) {
 		switchTheme()
 	case "f":
 		toggleBorder()
+	case "u":
+		triggerManualUpdateCheck()
 	case "?":
 		displayHelp()
 	}
@@ -145,6 +157,8 @@ func handleReadingEvent(id string) {
 		setMode(modeSearchInput)
 	case ",":
 		openReadingSettings()
+	case "u":
+		triggerManualUpdateCheck()
 	case "n":
 		jumpSearch(true)
 	case "N":
@@ -272,6 +286,38 @@ func handleDeleteConfirmEvent(id string) {
 		removeSelectedBook(false)
 	case "D":
 		removeSelectedBook(true)
+	}
+}
+
+func handleUpdatePromptEvent(id string) {
+	switch id {
+	case "y", "<Enter>":
+		startUpdateInstall()
+	case "n", "q", "<Escape>":
+		if !app.updatePromptManual && app.updateRelease != nil && app.config != nil {
+			app.config.SkippedUpdateVersion = strings.TrimSpace(app.updateRelease.TagName)
+			_ = lib.SaveConfig(app.config)
+		}
+		app.mode = app.updateReturnMode
+		if app.updatePromptManual {
+			app.statusMessage = "已取消本次更新"
+		} else {
+			app.statusMessage = "该版本已忽略，之后将不再自动提醒"
+		}
+	}
+}
+
+func handleUpdatingEvent(id string) {
+	switch id {
+	case "q", "<C-c>":
+		app.statusMessage = "更新进行中，请稍候"
+	}
+}
+
+func handleUpdateRestartEvent(id string) {
+	switch id {
+	case "<Enter>", "q", "<C-c>":
+		app.quit = true
 	}
 }
 

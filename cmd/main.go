@@ -34,5 +34,5 @@ func main() {
 		}
 	}
 
-	core.Run(initialFile, *lines)
+	core.Run(initialFile, *lines, Version)
 }

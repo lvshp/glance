@@ -14,6 +14,7 @@ func TestConfigRoundTrip(t *testing.T) {
 		Theme:                    "jetbrains",
 		DisplayLines:             12,
 		ShowBorder:               false,
+		SkippedUpdateVersion:     "v0.1.9",
 		ForceBasicColor:          true,
 		ReadingContentWidthRatio: 0.8,
 		ReadingMarginLeft:        3,
@@ -32,6 +33,9 @@ func TestConfigRoundTrip(t *testing.T) {
 	}
 	if loaded.Theme != "jetbrains" || loaded.DisplayLines != 12 || loaded.ShowBorder {
 		t.Fatalf("unexpected config: %#v", loaded)
+	}
+	if loaded.SkippedUpdateVersion != "v0.1.9" {
+		t.Fatalf("SkippedUpdateVersion = %q, want v0.1.9", loaded.SkippedUpdateVersion)
 	}
 	if !loaded.ForceBasicColor {
 		t.Fatalf("ForceBasicColor = false, want true")
@@ -89,15 +93,15 @@ func TestLoadConfigSanitizesInvalidReadingOptions(t *testing.T) {
 
 func TestNormalizeConfiguredColor(t *testing.T) {
 	cases := map[string]string{
-		"#abc":       "#ABC",
-		"#abcdef":    "#ABCDEF",
-		"12, 34,56":  "12,34,56",
-		"255,255,0":  "255,255,0",
-		"bad":        "",
-		"256,0,0":    "",
-		"#12":        "",
-		"#GGGGGG":    "",
-		"1,2":        "",
+		"#abc":      "#ABC",
+		"#abcdef":   "#ABCDEF",
+		"12, 34,56": "12,34,56",
+		"255,255,0": "255,255,0",
+		"bad":       "",
+		"256,0,0":   "",
+		"#12":       "",
+		"#GGGGGG":   "",
+		"1,2":       "",
 	}
 
 	for input, want := range cases {

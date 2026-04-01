@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -15,6 +15,7 @@ type Config struct {
 	DisplayLines             int     `json:"display_lines"`
 	ShowBorder               bool    `json:"show_border"`
 	SelectedBookshelf        int     `json:"selected_bookshelf"`
+	SkippedUpdateVersion     string  `json:"skipped_update_version"`
 	ForceBasicColor          bool    `json:"force_basic_color"`
 	ReadingContentWidthRatio float64 `json:"reading_content_width_ratio"`
 	ReadingMarginLeft        int     `json:"reading_margin_left"`
@@ -27,17 +28,17 @@ type Config struct {
 }
 
 type BookshelfBook struct {
-	Path            string `json:"path"`
-	Title           string `json:"title"`
-	Format          string `json:"format"`
-	ProgressPos     int    `json:"progress_pos"`
-	ProgressTotal   int    `json:"progress_total"`
-	ProgressPercent int    `json:"progress_percent"`
-	CurrentChapter  string `json:"current_chapter"`
-	ChapterIndex    int    `json:"chapter_index"`
+	Path            string  `json:"path"`
+	Title           string  `json:"title"`
+	Format          string  `json:"format"`
+	ProgressPos     int     `json:"progress_pos"`
+	ProgressTotal   int     `json:"progress_total"`
+	ProgressPercent int     `json:"progress_percent"`
+	CurrentChapter  string  `json:"current_chapter"`
+	ChapterIndex    int     `json:"chapter_index"`
 	ChapterOffset   float64 `json:"chapter_offset"`
-	LastReadAt      string `json:"last_read_at"`
-	ImportedAt      string `json:"imported_at"`
+	LastReadAt      string  `json:"last_read_at"`
+	ImportedAt      string  `json:"imported_at"`
 }
 
 type BookshelfStore struct {
