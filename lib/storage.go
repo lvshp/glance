@@ -34,6 +34,8 @@ type BookshelfBook struct {
 	ProgressTotal   int    `json:"progress_total"`
 	ProgressPercent int    `json:"progress_percent"`
 	CurrentChapter  string `json:"current_chapter"`
+	ChapterIndex    int    `json:"chapter_index"`
+	ChapterOffset   float64 `json:"chapter_offset"`
 	LastReadAt      string `json:"last_read_at"`
 	ImportedAt      string `json:"imported_at"`
 }

@@ -8,7 +8,15 @@ import (
 )
 
 type ProgressStore struct {
-	Books map[string]int `json:"books"`
+	Books   map[string]int            `json:"books"`
+	Anchors map[string]ProgressAnchor `json:"anchors,omitempty"`
+}
+
+type ProgressAnchor struct {
+	Pos           int     `json:"pos"`
+	ChapterIndex  int     `json:"chapter_index"`
+	ChapterOffset float64 `json:"chapter_offset"`
+	OverallRatio  float64 `json:"overall_ratio"`
 }
 
 func progressFilePath() (string, error) {
@@ -67,20 +75,23 @@ func LoadProgress() (*ProgressStore, error) {
 			break
 		}
 		if os.IsNotExist(err) {
-			return &ProgressStore{Books: make(map[string]int)}, nil
+			return &ProgressStore{Books: make(map[string]int), Anchors: make(map[string]ProgressAnchor)}, nil
 		}
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	store := &ProgressStore{Books: make(map[string]int)}
+	store := &ProgressStore{Books: make(map[string]int), Anchors: make(map[string]ProgressAnchor)}
 	if err := json.Unmarshal(data, store); err != nil {
 		return nil, err
 	}
 
 	if store.Books == nil {
 		store.Books = make(map[string]int)
+	}
+	if store.Anchors == nil {
+		store.Anchors = make(map[string]ProgressAnchor)
 	}
 
 	return store, nil
@@ -93,10 +104,13 @@ func SaveProgress(store *ProgressStore) error {
 	}
 
 	if store == nil {
-		store = &ProgressStore{Books: make(map[string]int)}
+		store = &ProgressStore{Books: make(map[string]int), Anchors: make(map[string]ProgressAnchor)}
 	}
 	if store.Books == nil {
 		store.Books = make(map[string]int)
+	}
+	if store.Anchors == nil {
+		store.Anchors = make(map[string]ProgressAnchor)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {

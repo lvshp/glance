@@ -494,20 +494,50 @@ func openBook(path string) error {
 	app.tocNumber = ""
 	app.mode = modeReading
 
+	var savedAnchor reader.ProgressAnchor
+	hasSavedAnchor := false
+	legacyChapterTitle := ""
+
 	if book, ok := lib.FindBookshelfBook(app.bookshelf, path); ok {
 		app.currentBook = &book
-		if book.ProgressPos > 0 {
-			app.reader.Goto(book.ProgressPos)
-		} else if pos, ok := app.progress.Books[path]; ok {
-			app.reader.Goto(pos)
+		legacyChapterTitle = strings.TrimSpace(book.CurrentChapter)
+		if book.ChapterIndex > 0 || book.ChapterOffset > 0 || (book.ProgressPos == 0 && legacyChapterTitle == "") {
+			savedAnchor = reader.ProgressAnchor{
+				Pos:           book.ProgressPos,
+				ChapterIndex:  book.ChapterIndex,
+				ChapterOffset: book.ChapterOffset,
+			}
+			hasSavedAnchor = true
 		}
-	} else if pos, ok := app.progress.Books[path]; ok {
-		app.reader.Goto(pos)
 	}
-
-	app.currentBook = upsertCurrentBook(path)
+	if !hasSavedAnchor {
+		if anchor, ok := app.progress.Anchors[path]; ok {
+			savedAnchor = reader.ProgressAnchor{
+				Pos:           anchor.Pos,
+				ChapterIndex:  anchor.ChapterIndex,
+				ChapterOffset: anchor.ChapterOffset,
+				OverallRatio:  anchor.OverallRatio,
+			}
+			hasSavedAnchor = true
+		} else if pos, ok := app.progress.Books[path]; ok {
+			savedAnchor = reader.ProgressAnchor{Pos: pos}
+			hasSavedAnchor = true
+		}
+	}
 	mainPanel.Title = " editor: " + filepath.Base(path) + " "
 	applyLayoutFromTerminal()
+	if hasSavedAnchor {
+		reader.RestoreFromAnchor(app.reader, savedAnchor)
+	} else if legacyChapterTitle != "" {
+		if chapterIndex := reader.FindChapterIndexByTitle(app.reader, legacyChapterTitle); chapterIndex >= 0 {
+			reader.RestoreFromAnchor(app.reader, reader.ProgressAnchor{
+				ChapterIndex: chapterIndex,
+				ChapterOffset: 0,
+				Pos:          0,
+			})
+		}
+	}
+	app.currentBook = upsertCurrentBook(path)
 	app.statusMessage = "已打开 " + filepath.Base(path)
 	return nil
 }
@@ -630,14 +660,17 @@ func newReaderForPath(path string) (reader.Reader, error) {
 }
 
 func upsertCurrentBook(path string) *lib.BookshelfBook {
+	anchor := reader.AnchorFromReader(app.reader)
 	book := lib.BookshelfBook{
 		Path:            path,
 		Title:           bookTitleForPath(path, app.reader.BookTitle()),
 		Format:          strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), "."),
-		ProgressPos:     app.reader.CurrentPos(),
+		ProgressPos:     anchor.Pos,
 		ProgressTotal:   app.reader.Total(),
-		ProgressPercent: progressPercent(app.reader.CurrentPos(), app.reader.Total()),
+		ProgressPercent: progressPercent(anchor.Pos, app.reader.Total()),
 		CurrentChapter:  app.reader.CurrentChapterTitle(),
+		ChapterIndex:    anchor.ChapterIndex,
+		ChapterOffset:   anchor.ChapterOffset,
 		LastReadAt:      time.Now().Format(time.RFC3339),
 	}
 	if existing, ok := lib.FindBookshelfBook(app.bookshelf, path); ok {
@@ -658,21 +691,33 @@ func syncCurrentBookState() {
 		return
 	}
 
+	anchor := reader.AnchorFromReader(app.reader)
 	book := lib.BookshelfBook{
 		Path:            app.currentFile,
 		Title:           bookTitleForPath(app.currentFile, app.reader.BookTitle()),
 		Format:          strings.TrimPrefix(strings.ToLower(filepath.Ext(app.currentFile)), "."),
-		ProgressPos:     app.reader.CurrentPos(),
+		ProgressPos:     anchor.Pos,
 		ProgressTotal:   app.reader.Total(),
-		ProgressPercent: progressPercent(app.reader.CurrentPos(), app.reader.Total()),
+		ProgressPercent: progressPercent(anchor.Pos, app.reader.Total()),
 		CurrentChapter:  app.reader.CurrentChapterTitle(),
+		ChapterIndex:    anchor.ChapterIndex,
+		ChapterOffset:   anchor.ChapterOffset,
 		LastReadAt:      time.Now().Format(time.RFC3339),
 	}
 	if existing, ok := lib.FindBookshelfBook(app.bookshelf, app.currentFile); ok {
 		book.ImportedAt = existing.ImportedAt
 	}
 	lib.UpsertBookshelfBook(app.bookshelf, book)
-	app.progress.Books[app.currentFile] = app.reader.CurrentPos()
+	app.progress.Books[app.currentFile] = anchor.Pos
+	if app.progress.Anchors == nil {
+		app.progress.Anchors = map[string]lib.ProgressAnchor{}
+	}
+	app.progress.Anchors[app.currentFile] = lib.ProgressAnchor{
+		Pos:           anchor.Pos,
+		ChapterIndex:  anchor.ChapterIndex,
+		ChapterOffset: anchor.ChapterOffset,
+		OverallRatio:  anchor.OverallRatio,
+	}
 	_ = lib.SaveBookshelf(app.bookshelf)
 	_ = lib.SaveProgress(app.progress)
 }
