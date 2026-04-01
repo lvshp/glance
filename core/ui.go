@@ -331,6 +331,9 @@ func parseHexColor(value string) (int, int, int, bool) {
 }
 
 func rgbToXtermColor(r, g, b int) ui.Color {
+	if !terminalSupports256Color() {
+		return rgbToANSIColor(r, g, b)
+	}
 	if r == g && g == b {
 		if r < 8 {
 			return ui.Color(16)
@@ -344,6 +347,70 @@ func rgbToXtermColor(r, g, b int) ui.Color {
 	gc := int(float64(g) / 255 * 5)
 	bc := int(float64(b) / 255 * 5)
 	return ui.Color(16 + 36*rc + 6*gc + bc)
+}
+
+func terminalSupports256Color() bool {
+	if app != nil && app.config != nil && app.config.ForceBasicColor {
+		return false
+	}
+
+	term := strings.ToLower(strings.TrimSpace(os.Getenv("TERM")))
+	colorTerm := strings.ToLower(strings.TrimSpace(os.Getenv("COLORTERM")))
+
+	if strings.Contains(term, "256color") || strings.Contains(term, "direct") {
+		return true
+	}
+	if strings.Contains(colorTerm, "truecolor") || strings.Contains(colorTerm, "24bit") {
+		return true
+	}
+	switch {
+	case strings.Contains(term, "xterm"),
+		strings.Contains(term, "screen"),
+		strings.Contains(term, "tmux"),
+		strings.Contains(term, "rxvt"),
+		strings.Contains(term, "linux"):
+		return true
+	default:
+		return false
+	}
+}
+
+func rgbToANSIColor(r, g, b int) ui.Color {
+	type ansiColor struct {
+		color ui.Color
+		r     int
+		g     int
+		b     int
+	}
+
+	palette := []ansiColor{
+		{ui.ColorBlack, 0, 0, 0},
+		{ui.ColorRed, 205, 49, 49},
+		{ui.ColorGreen, 13, 188, 121},
+		{ui.ColorYellow, 229, 229, 16},
+		{ui.ColorBlue, 36, 114, 200},
+		{ui.ColorMagenta, 188, 63, 188},
+		{ui.ColorCyan, 17, 168, 205},
+		{ui.ColorWhite, 229, 229, 229},
+	}
+
+	best := palette[0].color
+	bestDistance := colorDistanceSquared(r, g, b, palette[0].r, palette[0].g, palette[0].b)
+	for _, candidate := range palette[1:] {
+		distance := colorDistanceSquared(r, g, b, candidate.r, candidate.g, candidate.b)
+		if distance < bestDistance {
+			bestDistance = distance
+			best = candidate.color
+		}
+	}
+	return best
+}
+
+func colorDistanceSquared(r1, g1, b1, r2, g2, b2 int) int {
+	dr := r1 - r2
+	dg := g1 - g2
+	db := b1 - b2
+	return dr*dr + dg*dg + db*db
 }
 
 func readingWidthRatio() float64 {
@@ -896,6 +963,7 @@ func buildLeftPanel(th theme) string {
 		"  s 保存书签",
 		"  B 打开书签",
 		"  m 目录",
+		"  c 切换颜色",
 		"  , 阅读设置",
 		"  T 切主题",
 		"",
@@ -1044,7 +1112,7 @@ func buildFooter() string {
 	case modeHome:
 		return line1 + "\n[↑/↓](fg:cyan):选择  [→/Enter](fg:cyan):打开  [i](fg:cyan):导入  [o/r](fg:cyan):排序/过滤  [x](fg:cyan):移除  [T](fg:cyan):主题  [q](fg:red):退出"
 	case modeReading:
-		return line1 + "\n[↑/↓](fg:cyan):翻页  [←/→](fg:cyan):切章  [+/-](fg:cyan):正文行数  [,](fg:cyan):阅读设置  [/](fg:cyan):搜索  [s/B](fg:cyan):书签  [m](fg:cyan):目录  [T](fg:cyan):主题  [q](fg:red):书架"
+		return line1 + "\n[↑/↓](fg:cyan):翻页  [←/→](fg:cyan):切章  [+/-](fg:cyan):正文行数  [c](fg:cyan):颜色  [,](fg:cyan):阅读设置  [/](fg:cyan):搜索  [s/B](fg:cyan):书签  [m](fg:cyan):目录  [T](fg:cyan):主题  [q](fg:red):书架"
 	case modeTOC:
 		return line1 + "\n[↑/↓](fg:cyan):移动  [→/Enter](fg:cyan):打开  [←/m](fg:cyan):返回  [0-9](fg:cyan):跳章  [q](fg:red):书架"
 	case modeBookmarks:
@@ -1347,6 +1415,7 @@ func readingSettingsItems() []readingSettingItem {
 		{Label: "行间距", Value: fmt.Sprintf("%d", readingLineSpacing())},
 		{Label: "字体颜色", Value: colorValue},
 		{Label: "高对比", Value: onOffText(app.config != nil && app.config.ReadingHighContrast)},
+		{Label: "基础色模式", Value: onOffText(app.config != nil && app.config.ForceBasicColor)},
 	}
 }
 
@@ -2058,6 +2127,14 @@ func activateReadingSetting() {
 		app.config.ReadingHighContrast = !app.config.ReadingHighContrast
 		_ = lib.SaveConfig(app.config)
 		app.statusMessage = "高对比已切换"
+	case 8:
+		app.config.ForceBasicColor = !app.config.ForceBasicColor
+		_ = lib.SaveConfig(app.config)
+		if app.config.ForceBasicColor {
+			app.statusMessage = "已切换为基础色模式"
+		} else {
+			app.statusMessage = "已切换为扩展颜色模式"
+		}
 	}
 }
 

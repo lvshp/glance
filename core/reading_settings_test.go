@@ -76,6 +76,7 @@ func TestBuildReadingSettingsPanelIncludesColorValue(t *testing.T) {
 	app = &appState{
 		settingsIndex: 0,
 		config: &lib.Config{
+			ForceBasicColor:          true,
 			ReadingContentWidthRatio: 0.75,
 			ReadingMarginLeft:        2,
 			ReadingMarginRight:       0,
@@ -90,5 +91,8 @@ func TestBuildReadingSettingsPanelIncludesColorValue(t *testing.T) {
 	panel := buildReadingSettingsPanel()
 	if !strings.Contains(panel, "字体颜色") || !strings.Contains(panel, "#FFFFFF") {
 		t.Fatalf("reading settings panel missing color entry: %q", panel)
+	}
+	if !strings.Contains(panel, "基础色模式") || !strings.Contains(panel, "开") {
+		t.Fatalf("reading settings panel missing basic color toggle: %q", panel)
 	}
 }

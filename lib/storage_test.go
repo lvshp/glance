@@ -14,6 +14,7 @@ func TestConfigRoundTrip(t *testing.T) {
 		Theme:                    "jetbrains",
 		DisplayLines:             12,
 		ShowBorder:               false,
+		ForceBasicColor:          true,
 		ReadingContentWidthRatio: 0.8,
 		ReadingMarginLeft:        3,
 		ReadingMarginTop:         2,
@@ -31,6 +32,9 @@ func TestConfigRoundTrip(t *testing.T) {
 	}
 	if loaded.Theme != "jetbrains" || loaded.DisplayLines != 12 || loaded.ShowBorder {
 		t.Fatalf("unexpected config: %#v", loaded)
+	}
+	if !loaded.ForceBasicColor {
+		t.Fatalf("ForceBasicColor = false, want true")
 	}
 	if loaded.ReadingContentWidthRatio != 0.8 || loaded.ReadingMarginLeft != 3 || loaded.ReadingMarginTop != 2 {
 		t.Fatalf("unexpected reading layout config: %#v", loaded)

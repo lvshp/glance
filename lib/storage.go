@@ -15,6 +15,7 @@ type Config struct {
 	DisplayLines             int     `json:"display_lines"`
 	ShowBorder               bool    `json:"show_border"`
 	SelectedBookshelf        int     `json:"selected_bookshelf"`
+	ForceBasicColor          bool    `json:"force_basic_color"`
 	ReadingContentWidthRatio float64 `json:"reading_content_width_ratio"`
 	ReadingMarginLeft        int     `json:"reading_margin_left"`
 	ReadingMarginRight       int     `json:"reading_margin_right"`
@@ -133,6 +134,7 @@ func defaultConfig() *Config {
 		Theme:                    "vscode",
 		DisplayLines:             8,
 		ShowBorder:               true,
+		ForceBasicColor:          false,
 		ReadingContentWidthRatio: 0.75,
 		ReadingMarginLeft:        2,
 		ReadingMarginRight:       0,
