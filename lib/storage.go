@@ -4,16 +4,25 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sort"
 	"strings"
 	"time"
 )
 
 type Config struct {
-	Theme             string `json:"theme"`
-	DisplayLines      int    `json:"display_lines"`
-	ShowBorder        bool   `json:"show_border"`
-	SelectedBookshelf int    `json:"selected_bookshelf"`
+	Theme                    string  `json:"theme"`
+	DisplayLines             int     `json:"display_lines"`
+	ShowBorder               bool    `json:"show_border"`
+	SelectedBookshelf        int     `json:"selected_bookshelf"`
+	ReadingContentWidthRatio float64 `json:"reading_content_width_ratio"`
+	ReadingMarginLeft        int     `json:"reading_margin_left"`
+	ReadingMarginRight       int     `json:"reading_margin_right"`
+	ReadingMarginTop         int     `json:"reading_margin_top"`
+	ReadingMarginBottom      int     `json:"reading_margin_bottom"`
+	ReadingLineSpacing       int     `json:"reading_line_spacing"`
+	ReadingTextColor         string  `json:"reading_text_color"`
+	ReadingHighContrast      bool    `json:"reading_high_contrast"`
 }
 
 type BookshelfBook struct {
@@ -103,28 +112,119 @@ func legacyGlanceDataPath(name string) (string, error) {
 }
 
 func LoadConfig() (*Config, error) {
-	cfg := &Config{
-		Theme:        "vscode",
-		DisplayLines: 8,
-		ShowBorder:   true,
-	}
+	cfg := defaultConfig()
 	if err := loadJSON(configFilePath, cfg); err != nil {
 		return nil, err
 	}
-	if cfg.DisplayLines < 1 {
-		cfg.DisplayLines = 8
-	}
-	if cfg.Theme == "" {
-		cfg.Theme = "vscode"
-	}
+	sanitizeConfig(cfg)
 	return cfg, nil
 }
 
 func SaveConfig(cfg *Config) error {
 	if cfg == nil {
-		cfg = &Config{Theme: "vscode", DisplayLines: 8, ShowBorder: true}
+		cfg = defaultConfig()
 	}
+	sanitizeConfig(cfg)
 	return saveJSON(configFilePath, cfg)
+}
+
+func defaultConfig() *Config {
+	return &Config{
+		Theme:                    "vscode",
+		DisplayLines:             8,
+		ShowBorder:               true,
+		ReadingContentWidthRatio: 0.75,
+		ReadingMarginLeft:        2,
+		ReadingMarginRight:       0,
+		ReadingMarginTop:         1,
+		ReadingMarginBottom:      0,
+		ReadingLineSpacing:       1,
+		ReadingTextColor:         "#FFFFFF",
+		ReadingHighContrast:      true,
+	}
+}
+
+func sanitizeConfig(cfg *Config) {
+	def := defaultConfig()
+	if cfg.Theme == "" {
+		cfg.Theme = def.Theme
+	}
+	if cfg.DisplayLines < 1 {
+		cfg.DisplayLines = def.DisplayLines
+	}
+	if cfg.ReadingContentWidthRatio <= 0 || cfg.ReadingContentWidthRatio > 1 {
+		cfg.ReadingContentWidthRatio = def.ReadingContentWidthRatio
+	}
+	if cfg.ReadingMarginLeft < 0 {
+		cfg.ReadingMarginLeft = def.ReadingMarginLeft
+	}
+	if cfg.ReadingMarginRight < 0 {
+		cfg.ReadingMarginRight = def.ReadingMarginRight
+	}
+	if cfg.ReadingMarginTop < 0 {
+		cfg.ReadingMarginTop = def.ReadingMarginTop
+	}
+	if cfg.ReadingMarginBottom < 0 {
+		cfg.ReadingMarginBottom = def.ReadingMarginBottom
+	}
+	if cfg.ReadingLineSpacing < 0 {
+		cfg.ReadingLineSpacing = def.ReadingLineSpacing
+	}
+	if normalizeConfiguredColor(cfg.ReadingTextColor) == "" {
+		cfg.ReadingTextColor = def.ReadingTextColor
+	} else {
+		cfg.ReadingTextColor = normalizeConfiguredColor(cfg.ReadingTextColor)
+	}
+}
+
+func normalizeConfiguredColor(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if strings.HasPrefix(value, "#") {
+		hex := strings.TrimPrefix(value, "#")
+		if len(hex) == 3 {
+			for _, r := range hex {
+				if !isHexDigit(byte(r)) {
+					return ""
+				}
+			}
+			return "#" + strings.ToUpper(hex)
+		}
+		if len(hex) != 6 {
+			return ""
+		}
+		for i := 0; i < len(hex); i++ {
+			if !isHexDigit(hex[i]) {
+				return ""
+			}
+		}
+		return "#" + strings.ToUpper(hex)
+	}
+
+	parts := strings.Split(value, ",")
+	if len(parts) != 3 {
+		return ""
+	}
+	values := make([]string, 0, 3)
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		num, err := strconv.Atoi(part)
+		if err != nil || num < 0 || num > 255 {
+			return ""
+		}
+		values = append(values, strconv.Itoa(num))
+	}
+	return strings.Join(values, ",")
+}
+
+func NormalizeConfiguredColor(value string) string {
+	return normalizeConfiguredColor(value)
+}
+
+func isHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
 }
 
 func LoadBookshelf() (*BookshelfStore, error) {

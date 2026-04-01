@@ -32,6 +32,10 @@ func handleEvents() {
 			handleTextInputEvent(e.ID, runSearch)
 		case modeImportInput:
 			handleTextInputEvent(e.ID, importBook)
+		case modeReadingSettings:
+			handleReadingSettingsEvent(e.ID)
+		case modeReadingColorInput:
+			handleTextInputEvent(e.ID, applyReadingTextColorInput)
 		case modeDeleteConfirm:
 			handleDeleteConfirmEvent(e.ID)
 		}
@@ -134,11 +138,13 @@ func handleReadingEvent(id string) {
 	case "-", "_":
 		setDisplayLines(app.displayLines - 1)
 	case "c":
-		app.color++
+		cycleReadingColorPreset()
 	case "t":
 		toggleTimer()
 	case "/":
 		setMode(modeSearchInput)
+	case ",":
+		openReadingSettings()
 	case "n":
 		jumpSearch(true)
 	case "N":
@@ -152,6 +158,23 @@ func handleReadingEvent(id string) {
 	case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		app.rowNumber += id
 		app.statusMessage = "跳转输入: " + app.rowNumber
+	}
+}
+
+func handleReadingSettingsEvent(id string) {
+	switch id {
+	case "<Escape>", "q":
+		app.mode = modeReading
+	case "j", "<Down>":
+		moveReadingSettings(1)
+	case "k", "<Up>":
+		moveReadingSettings(-1)
+	case "h", "<Left>":
+		adjustReadingSetting(-1)
+	case "l", "<Right>":
+		adjustReadingSetting(1)
+	case "<Enter>":
+		activateReadingSetting()
 	}
 }
 
@@ -190,7 +213,9 @@ func handleBookmarkEvent(id string) {
 func handleTextInputEvent(id string, onEnter func()) {
 	switch id {
 	case "<Escape>":
-		if app.currentFile != "" {
+		if app.mode == modeReadingColorInput {
+			app.mode = modeReadingSettings
+		} else if app.currentFile != "" {
 			app.mode = modeReading
 		} else {
 			app.mode = modeHome

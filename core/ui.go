@@ -29,6 +29,8 @@ const (
 	modeBookmarks     mode = "bookmarks"
 	modeSearchInput   mode = "search_input"
 	modeImportInput   mode = "import_input"
+	modeReadingSettings mode = "reading_settings"
+	modeReadingColorInput mode = "reading_color_input"
 	modeDeleteConfirm mode = "delete_confirm"
 )
 
@@ -89,6 +91,7 @@ type appState struct {
 	timer         bool
 	ticker        *time.Ticker
 	rowNumber     string
+	settingsIndex int
 
 	deleteTargetPath  string
 	deleteTargetTitle string
@@ -149,9 +152,9 @@ func availableThemes() map[string]theme {
 			Accent:     ui.ColorCyan,
 			SideAccent: ui.ColorMagenta,
 			FooterTag:  "SMART",
-			HomeName:   "workspace shelf",
-			LeftName:   "project",
-			RightName:  "structure",
+			HomeName:   "bookshelf",
+			LeftName:   "explorer",
+			RightName:  "inspector",
 		},
 		"ops-console": {
 			Name:       "ops-console",
@@ -163,9 +166,9 @@ func availableThemes() map[string]theme {
 			Accent:     ui.ColorRed,
 			SideAccent: ui.ColorCyan,
 			FooterTag:  "WATCH",
-			HomeName:   "registry",
-			LeftName:   "queues",
-			RightName:  "telemetry",
+			HomeName:   "bookshelf",
+			LeftName:   "explorer",
+			RightName:  "inspector",
 		},
 	}
 }
@@ -268,6 +271,121 @@ func initWidgets() {
 	mainPanel.TitleStyle.Fg = ui.ColorCyan
 	rightPanel.TitleStyle.Fg = ui.ColorCyan
 	footer.TitleStyle.Fg = ui.ColorCyan
+}
+
+func currentReadingTextColor() ui.Color {
+	if app == nil {
+		return ui.ColorWhite
+	}
+	if app.config != nil {
+		if color, ok := parseConfiguredUIColor(app.config.ReadingTextColor); ok {
+			return color
+		}
+		if app.config.ReadingHighContrast {
+			return ui.ColorWhite
+		}
+	}
+	return ui.ColorWhite
+}
+
+func parseConfiguredUIColor(value string) (ui.Color, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ui.ColorWhite, false
+	}
+	if strings.HasPrefix(value, "#") {
+		r, g, b, ok := parseHexColor(value)
+		if !ok {
+			return ui.ColorWhite, false
+		}
+		return rgbToXtermColor(r, g, b), true
+	}
+	parts := strings.Split(value, ",")
+	if len(parts) != 3 {
+		return ui.ColorWhite, false
+	}
+	values := make([]int, 0, 3)
+	for _, part := range parts {
+		num, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || num < 0 || num > 255 {
+			return ui.ColorWhite, false
+		}
+		values = append(values, num)
+	}
+	return rgbToXtermColor(values[0], values[1], values[2]), true
+}
+
+func parseHexColor(value string) (int, int, int, bool) {
+	hex := strings.TrimPrefix(strings.TrimSpace(value), "#")
+	if len(hex) == 3 {
+		hex = strings.Repeat(string(hex[0]), 2) + strings.Repeat(string(hex[1]), 2) + strings.Repeat(string(hex[2]), 2)
+	}
+	if len(hex) != 6 {
+		return 0, 0, 0, false
+	}
+	num, err := strconv.ParseUint(hex, 16, 32)
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	return int((num >> 16) & 0xFF), int((num >> 8) & 0xFF), int(num & 0xFF), true
+}
+
+func rgbToXtermColor(r, g, b int) ui.Color {
+	if r == g && g == b {
+		if r < 8 {
+			return ui.Color(16)
+		}
+		if r > 248 {
+			return ui.Color(231)
+		}
+		return ui.Color(232 + ((r-8)*24)/247)
+	}
+	rc := int(float64(r) / 255 * 5)
+	gc := int(float64(g) / 255 * 5)
+	bc := int(float64(b) / 255 * 5)
+	return ui.Color(16 + 36*rc + 6*gc + bc)
+}
+
+func readingWidthRatio() float64 {
+	if app == nil || app.config == nil || app.config.ReadingContentWidthRatio <= 0 || app.config.ReadingContentWidthRatio > 1 {
+		return 0.75
+	}
+	return app.config.ReadingContentWidthRatio
+}
+
+func readingMarginLeft() int {
+	if app == nil || app.config == nil || app.config.ReadingMarginLeft < 0 {
+		return 2
+	}
+	return app.config.ReadingMarginLeft
+}
+
+func readingMarginRight() int {
+	if app == nil || app.config == nil || app.config.ReadingMarginRight < 0 {
+		return 0
+	}
+	return app.config.ReadingMarginRight
+}
+
+func readingMarginTop() int {
+	if app == nil || app.config == nil || app.config.ReadingMarginTop < 0 {
+		return 1
+	}
+	return app.config.ReadingMarginTop
+}
+
+func readingMarginBottom() int {
+	if app == nil || app.config == nil || app.config.ReadingMarginBottom < 0 {
+		return 0
+	}
+	return app.config.ReadingMarginBottom
+}
+
+func readingLineSpacing() int {
+	if app == nil || app.config == nil || app.config.ReadingLineSpacing < 0 {
+		return 1
+	}
+	return app.config.ReadingLineSpacing
 }
 
 func persistState() {
@@ -675,15 +793,16 @@ func refreshChrome() {
 	leftPanel.BorderStyle.Fg = th.SideAccent
 	rightPanel.BorderStyle.Fg = th.SideAccent
 	footer.BorderStyle.Fg = th.HeaderTint
+	header.TextStyle.Fg = ui.ColorWhite
+	leftPanel.TextStyle.Fg = ui.ColorWhite
+	rightPanel.TextStyle.Fg = ui.ColorWhite
+	footer.TextStyle.Fg = ui.ColorWhite
 	header.TitleStyle.Fg = th.HeaderTint
 	leftPanel.TitleStyle.Fg = th.SideAccent
 	mainPanel.TitleStyle.Fg = th.Accent
 	rightPanel.TitleStyle.Fg = th.SideAccent
 	footer.TitleStyle.Fg = th.HeaderTint
-	mainPanel.TextStyle.Fg = ui.Color(app.color % 8)
-	if app.color == 0 {
-		mainPanel.TextStyle.Fg = ui.ColorWhite
-	}
+	mainPanel.TextStyle.Fg = currentReadingTextColor()
 }
 
 func buildHeader(th theme) string {
@@ -734,67 +853,26 @@ func buildHeader(th theme) string {
 
 func buildLeftPanel(th theme) string {
 	if app.mode == modeHome || app.mode == modeImportInput || app.mode == modeDeleteConfirm {
-		switch th.Name {
-		case "jetbrains":
-			return strings.Join([]string{
-				"[Workspace](fg:yellow,mod:bold)",
-				"",
-				"[Navigate](fg:cyan,mod:bold)",
-				"  Enter   打开条目",
-				"  i       导入文件",
-				"  o       排序视图",
-				"  r       过滤视图",
-				"  x       移出书架",
-				"  T       切换主题",
-				"",
-				"[Scope](fg:magenta,mod:bold)",
-				"  排序  " + readableSort(app.sortMode),
-				"  过滤  " + readableFilter(app.filterMode),
-				"",
-				"[Profile](fg:green,mod:bold)",
-				"  theme  " + th.Name,
-			}, "\n")
-		case "ops-console":
-			return strings.Join([]string{
-				"[Shelf Queue](fg:green,mod:bold)",
-				"",
-				"[Control](fg:red,mod:bold)",
-				"  Enter   进入任务",
-				"  i       导入资源",
-				"  o       调整排序",
-				"  r       切换过滤",
-				"  x       清退条目",
-				"  T       切换面板",
-				"",
-				"[Signals](fg:cyan,mod:bold)",
-				"  sort    " + readableSort(app.sortMode),
-				"  filter  " + readableFilter(app.filterMode),
-				"",
-				"[Status](fg:yellow,mod:bold)",
-				"  ready   home",
-			}, "\n")
-		default:
-			return strings.Join([]string{
-				"[Bookshelf](fg:cyan,mod:bold)",
-				"",
-				"[Actions](fg:yellow,mod:bold)",
-				"  Enter   打开书籍",
-				"  i       导入文件",
-				"  o       排序视图",
-				"  r       过滤视图",
-				"  x       移出书架",
-				"  T       切换主题",
-				"",
-				"[Sort](fg:yellow,mod:bold)",
-				"  " + readableSort(app.sortMode),
-				"",
-				"[Filter](fg:green,mod:bold)",
-				"  " + readableFilter(app.filterMode),
-				"",
-				"[Theme](fg:cyan,mod:bold)",
-				"  " + th.Name,
-			}, "\n")
-		}
+		return strings.Join([]string{
+			"[Bookshelf](fg:cyan,mod:bold)",
+			"",
+			"[Actions](fg:yellow,mod:bold)",
+			"  Enter   打开书籍",
+			"  i       导入文件",
+			"  o       排序视图",
+			"  r       过滤视图",
+			"  x       移出书架",
+			"  T       切换主题",
+			"",
+			"[Sort](fg:yellow,mod:bold)",
+			"  " + readableSort(app.sortMode),
+			"",
+			"[Filter](fg:green,mod:bold)",
+			"  " + readableFilter(app.filterMode),
+			"",
+			"[Theme](fg:cyan,mod:bold)",
+			"  " + th.Name,
+		}, "\n")
 	}
 
 	currentChapter := ""
@@ -804,68 +882,26 @@ func buildLeftPanel(th theme) string {
 	if currentChapter == "" {
 		currentChapter = "Inbox"
 	}
-	switch th.Name {
-	case "jetbrains":
-		return strings.Join([]string{
-			"[Project](fg:yellow,mod:bold)",
-			"",
-			"  workspace/",
-			"    bookshelf/",
-			"    reader/",
-			"    bookmarks/",
-			fmt.Sprintf("    > %s", shorten(currentDisplayName(), 14)),
-			"",
-			"[Shortcuts](fg:cyan,mod:bold)",
-			"  / 搜索",
-			"  s 保存书签",
-			"  B 管理书签",
-			"  m 打开目录",
-			"  T 切换主题",
-			"",
-			"[Focus](fg:magenta,mod:bold)",
-			"  " + shorten(currentChapter, 14),
-		}, "\n")
-	case "ops-console":
-		return strings.Join([]string{
-			"[Queues](fg:green,mod:bold)",
-			"",
-			"  ingest/",
-			"    reading/",
-			"    bookmarks/",
-			"    search/",
-			fmt.Sprintf("    > %s", shorten(currentDisplayName(), 14)),
-			"",
-			"[Ops](fg:red,mod:bold)",
-			"  / 查询正文",
-			"  s 保存锚点",
-			"  B 书签队列",
-			"  m 索引面板",
-			"  T 切换视图",
-			"",
-			"[Live Focus](fg:cyan,mod:bold)",
-			"  " + shorten(currentChapter, 14),
-		}, "\n")
-	default:
-		return strings.Join([]string{
-			"[Explorer](fg:cyan,mod:bold)",
-			"",
-			"  bookshelf/",
-			"    core/",
-			"    reader/",
-			"    themes/",
-			fmt.Sprintf("    > %s", shorten(currentDisplayName(), 14)),
-			"",
-			"[Actions](fg:yellow,mod:bold)",
-			"  / 搜索",
-			"  s 保存书签",
-			"  B 打开书签",
-			"  m 目录",
-			"  T 切主题",
-			"",
-			"[Current Focus](fg:green,mod:bold)",
-			"  " + shorten(currentChapter, 14),
-		}, "\n")
-	}
+	return strings.Join([]string{
+		"[Explorer](fg:cyan,mod:bold)",
+		"",
+		"  bookshelf/",
+		"    core/",
+		"    reader/",
+		"    themes/",
+		fmt.Sprintf("    > %s", shorten(currentDisplayName(), 14)),
+		"",
+		"[Actions](fg:yellow,mod:bold)",
+		"  / 搜索",
+		"  s 保存书签",
+		"  B 打开书签",
+		"  m 目录",
+		"  , 阅读设置",
+		"  T 切主题",
+		"",
+		"[Current Focus](fg:green,mod:bold)",
+		"  " + shorten(currentChapter, 14),
+	}, "\n")
 }
 
 func buildRightPanel(th theme) string {
@@ -897,29 +933,12 @@ func buildRightPanel(th theme) string {
 				"  回车继续阅读",
 			)
 		}
-		switch th.Name {
-		case "jetbrains":
-			lines = append(lines, "",
-				"[Tool Window](fg:magenta,mod:bold)",
-				"  indexing complete",
-				"  sync local shelf",
-				"  theme profile ready",
-			)
-		case "ops-console":
-			lines = append(lines, "",
-				"[Telemetry](fg:green,mod:bold)",
-				"  queue stable",
-				"  ingest available",
-				"  theme applied",
-			)
-		default:
-			lines = append(lines, "",
-				"[Recent Status](fg:green,mod:bold)",
-				"  home ready",
-				"  import available",
-				"  theme synced",
-			)
-		}
+		lines = append(lines, "",
+			"[Recent Status](fg:green,mod:bold)",
+			"  home ready",
+			"  import available",
+			"  theme synced",
+		)
 		return strings.Join(lines, "\n")
 	}
 
@@ -940,41 +959,16 @@ func buildRightPanel(th theme) string {
 	if rightPanel != nil && rightPanel.Inner.Dx() > 6 {
 		width = rightPanel.Inner.Dx() - 6
 	}
-	switch th.Name {
-	case "jetbrains":
-		lines := []string{"[Structure](fg:yellow,mod:bold)", ""}
-		lines = append(lines, buildDetailBlock("章节", chapter, width)...)
-		lines = append(lines, "")
-		lines = append(lines, buildDetailBlock("进度", formatProgressSummary(current, total, progress), width)...)
-		lines = append(lines, "")
-		lines = append(lines, buildDetailBlock("总行数", fmt.Sprintf("%d lines", total), width)...)
-		lines = append(lines, "", "[Find](fg:cyan,mod:bold)", "")
-		lines = append(lines, buildDetailBlock("查询", emptyFallback(app.searchQuery, "无"), width)...)
-		lines = append(lines, "", "[Problems](fg:magenta,mod:bold)", "  0 unresolved", "  layout synced", "  session warm")
-		return strings.Join(lines, "\n")
-	case "ops-console":
-		lines := []string{"[Telemetry](fg:green,mod:bold)", ""}
-		lines = append(lines, buildDetailBlock("章节", chapter, width)...)
-		lines = append(lines, "")
-		lines = append(lines, buildDetailBlock("进度", formatProgressSummary(current, total, progress), width)...)
-		lines = append(lines, "")
-		lines = append(lines, buildDetailBlock("总行数", fmt.Sprintf("%d lines", total), width)...)
-		lines = append(lines, "", "[Query](fg:red,mod:bold)", "")
-		lines = append(lines, buildDetailBlock("关键词", emptyFallback(app.searchQuery, "无"), width)...)
-		lines = append(lines, "", "[Live Feed](fg:cyan,mod:bold)", "  reader resumed", "  progress synced", "  monitor stable")
-		return strings.Join(lines, "\n")
-	default:
-		lines := []string{"[Inspector](fg:cyan,mod:bold)", ""}
-		lines = append(lines, buildDetailBlock("章节", chapter, width)...)
-		lines = append(lines, "")
-		lines = append(lines, buildDetailBlock("进度", formatProgressSummary(current, total, progress), width)...)
-		lines = append(lines, "")
-		lines = append(lines, buildDetailBlock("总行数", fmt.Sprintf("%d lines", total), width)...)
-		lines = append(lines, "", "[Search](fg:yellow,mod:bold)", "")
-		lines = append(lines, buildDetailBlock("查询", emptyFallback(app.searchQuery, "无"), width)...)
-		lines = append(lines, "", "[Recent Logs](fg:green,mod:bold)", "  reader resumed", "  progress synced", "  layout stable")
-		return strings.Join(lines, "\n")
-	}
+	lines := []string{"[Inspector](fg:cyan,mod:bold)", ""}
+	lines = append(lines, buildDetailBlock("章节", chapter, width)...)
+	lines = append(lines, "")
+	lines = append(lines, buildDetailBlock("进度", formatProgressSummary(current, total, progress), width)...)
+	lines = append(lines, "")
+	lines = append(lines, buildDetailBlock("总行数", fmt.Sprintf("%d lines", total), width)...)
+	lines = append(lines, "", "[Search](fg:yellow,mod:bold)", "")
+	lines = append(lines, buildDetailBlock("查询", emptyFallback(app.searchQuery, "无"), width)...)
+	lines = append(lines, "", "[Recent Logs](fg:green,mod:bold)", "  reader resumed", "  progress synced", "  layout stable")
+	return strings.Join(lines, "\n")
 }
 
 func buildDetailBlock(label, value string, width int) []string {
@@ -1050,7 +1044,7 @@ func buildFooter() string {
 	case modeHome:
 		return line1 + "\n[↑/↓](fg:cyan):选择  [→/Enter](fg:cyan):打开  [i](fg:cyan):导入  [o/r](fg:cyan):排序/过滤  [x](fg:cyan):移除  [T](fg:cyan):主题  [q](fg:red):退出"
 	case modeReading:
-		return line1 + "\n[↑/↓](fg:cyan):翻页  [←/→](fg:cyan):切章  [+/-](fg:cyan):行数  [/](fg:cyan):搜索  [s/B](fg:cyan):书签  [m](fg:cyan):目录  [T](fg:cyan):主题  [q](fg:red):书架"
+		return line1 + "\n[↑/↓](fg:cyan):翻页  [←/→](fg:cyan):切章  [+/-](fg:cyan):正文行数  [,](fg:cyan):阅读设置  [/](fg:cyan):搜索  [s/B](fg:cyan):书签  [m](fg:cyan):目录  [T](fg:cyan):主题  [q](fg:red):书架"
 	case modeTOC:
 		return line1 + "\n[↑/↓](fg:cyan):移动  [→/Enter](fg:cyan):打开  [←/m](fg:cyan):返回  [0-9](fg:cyan):跳章  [q](fg:red):书架"
 	case modeBookmarks:
@@ -1063,6 +1057,10 @@ func buildFooter() string {
 			scope = "递归"
 		}
 		return line1 + "\n输入文件或文件夹路径，Tab 补全，Ctrl-r 切换扫描范围(" + scope + ")，Esc 取消"
+	case modeReadingSettings:
+		return line1 + "\n[↑/↓](fg:cyan):选择  [←/→](fg:cyan):调整  [Enter](fg:cyan):切换/编辑  [Esc](fg:red):返回阅读"
+	case modeReadingColorInput:
+		return line1 + "\n输入字体颜色，支持 #RRGGBB / #RGB / R,G,B，Enter 保存，Esc 取消"
 	case modeDeleteConfirm:
 		return line1 + "\n[y](fg:cyan):仅移出书架  [D](fg:red):删除本地文件  [Esc](fg:yellow):取消"
 	default:
@@ -1078,6 +1076,10 @@ func buildMainTitle() string {
 		return " bookmarks "
 	case modeTOC:
 		return " table of contents "
+	case modeReadingSettings:
+		return " reading settings "
+	case modeReadingColorInput:
+		return " reading color "
 	default:
 		return " editor: " + currentDisplayName() + " "
 	}
@@ -1126,6 +1128,10 @@ func buildMainPanel() string {
 		return buildBookmarksPanel()
 	case modeSearchInput:
 		return "搜索\n\n请输入关键字并回车执行：\n\n" + renderInputWithCursor(app.inputValue, app.inputCursor)
+	case modeReadingSettings:
+		return buildReadingSettingsPanel()
+	case modeReadingColorInput:
+		return "阅读颜色\n\n请输入字体颜色：\n\n" + renderInputWithCursor(app.inputValue, app.inputCursor) + "\n\n支持 #RRGGBB、#RGB 或 R,G,B。"
 	default:
 		if app.showHelp {
 			return buildHelpPanel()
@@ -1149,14 +1155,18 @@ func readingContentWidth(mainWidth int) int {
 		return 80
 	}
 	if app != nil && app.reader != nil {
-		narrow := width * 3 / 4
-		if narrow < 28 {
-			narrow = 28
+		target := int(float64(width) * readingWidthRatio())
+		if target < 28 {
+			target = 28
 		}
-		if narrow > width {
-			narrow = width
+		if target > width {
+			target = width
 		}
-		return narrow
+		target -= readingMarginLeft() + readingMarginRight()
+		if target < 20 {
+			target = 20
+		}
+		return target
 	}
 	return width
 }
@@ -1165,11 +1175,14 @@ func readingVisibleSourceLines() int {
 	if app == nil || app.displayLines < 1 {
 		return 1
 	}
-	lines := (app.displayLines + 1) / 2
-	if lines < 1 {
-		lines = 1
+	maxLines := readingMaxSourceLines()
+	if maxLines < 1 {
+		maxLines = 1
 	}
-	return lines
+	if app.displayLines > maxLines {
+		return maxLines
+	}
+	return app.displayLines
 }
 
 func formatReadingPanel(text string) string {
@@ -1178,15 +1191,36 @@ func formatReadingPanel(text string) string {
 		return ""
 	}
 	lines := strings.Split(text, "\n")
-	padded := make([]string, 0, len(lines)*2+1)
-	padded = append(padded, "")
+	lineGap := readingLineSpacing()
+	leftPad := strings.Repeat(" ", readingMarginLeft())
+	padded := make([]string, 0, len(lines)*(lineGap+1)+readingMarginTop()+readingMarginBottom())
+	for i := 0; i < readingMarginTop(); i++ {
+		padded = append(padded, "")
+	}
 	for i, line := range lines {
-		padded = append(padded, "  "+line)
+		padded = append(padded, leftPad+line)
 		if i != len(lines)-1 {
-			padded = append(padded, "")
+			for gap := 0; gap < lineGap; gap++ {
+				padded = append(padded, "")
+			}
 		}
 	}
+	for i := 0; i < readingMarginBottom(); i++ {
+		padded = append(padded, "")
+	}
 	return strings.Join(padded, "\n")
+}
+
+func readingMaxSourceLines() int {
+	if mainPanel == nil {
+		return max(1, app.displayLines)
+	}
+	available := mainPanel.Inner.Dy() - readingMarginTop() - readingMarginBottom()
+	if available < 1 {
+		return 1
+	}
+	spacing := readingLineSpacing()
+	return max(1, (available+spacing)/(spacing+1))
 }
 
 func highlightSearchMatches(text, query string) string {
@@ -1230,14 +1264,14 @@ func buildHelpPanel() string {
 
 	leftSections := []string{
 		"[书架首页](fg:green,mod:bold)\n  j/k 移动\n  Enter 打开\n  i 导入\n  o/r 排序过滤\n  x 移除",
-		"[阅读界面](fg:green,mod:bold)\n  j/k 翻页\n  [ / ] 切章\n  / 搜索\n  n/N 结果跳转\n  s/B 书签\n  m 目录",
+		"[阅读界面](fg:green,mod:bold)\n  j/k 翻页\n  [ / ] 切章\n  / 搜索\n  n/N 结果跳转\n  s/B 书签\n  m 目录\n  , 阅读设置",
 		"[目录 / 书签](fg:green,mod:bold)\n  j/k 移动\n  Enter 打开\n  m 或 B 返回",
 		"[通用](fg:green,mod:bold)\n  +/- 调整行数\n  T 切换主题\n  q 返回书架或退出",
 	}
 
 	rightSections := []string{
 		"[书架首页](fg:magenta,mod:bold)\n  ↑/↓ 选择\n  → 或 Enter 打开",
-		"[阅读界面](fg:magenta,mod:bold)\n  ↑/↓ 翻页\n  ←/→ 切章",
+		"[阅读界面](fg:magenta,mod:bold)\n  ↑/↓ 翻页\n  ←/→ 切章\n  , 阅读设置",
 		"[目录 / 书签](fg:magenta,mod:bold)\n  ↑/↓ 移动\n  → 或 Enter 打开\n  ← 返回",
 		"[导入输入](fg:magenta,mod:bold)\n  ←/→ 移动光标\n  ↑/↓ 选择候选\n  Tab 补全\n  拖入文件/目录自动取路径\n  Ctrl-r 切换递归\n  Enter 填入或导入\n  Esc 取消",
 	}
@@ -1264,6 +1298,63 @@ func joinColumns(left, right string, leftWidth int) string {
 		lines = append(lines, padDisplayText(l, leftWidth)+"  "+r)
 	}
 	return strings.Join(lines, "\n")
+}
+
+type readingSettingItem struct {
+	Label string
+	Value string
+}
+
+func buildReadingSettingsPanel() string {
+	items := readingSettingsItems()
+	if len(items) == 0 {
+		return "阅读设置不可用"
+	}
+	if app.settingsIndex < 0 {
+		app.settingsIndex = 0
+	}
+	if app.settingsIndex >= len(items) {
+		app.settingsIndex = len(items) - 1
+	}
+	lines := []string{
+		"阅读设置",
+		"",
+		"这些设置全局生效，三个主题共用。",
+		"",
+	}
+	for i, item := range items {
+		prefix := "  "
+		if i == app.settingsIndex {
+			prefix = "> "
+		}
+		lines = append(lines, fmt.Sprintf("%s%-10s %s", prefix, item.Label, item.Value))
+	}
+	lines = append(lines, "", "提示：字体颜色支持 #RRGGBB、#RGB、R,G,B。")
+	return strings.Join(lines, "\n")
+}
+
+func readingSettingsItems() []readingSettingItem {
+	colorValue := "#FFFFFF"
+	if app != nil && app.config != nil && strings.TrimSpace(app.config.ReadingTextColor) != "" {
+		colorValue = app.config.ReadingTextColor
+	}
+	return []readingSettingItem{
+		{Label: "正文宽度", Value: fmt.Sprintf("%.0f%%", readingWidthRatio()*100)},
+		{Label: "左边距", Value: fmt.Sprintf("%d", readingMarginLeft())},
+		{Label: "右边距", Value: fmt.Sprintf("%d", readingMarginRight())},
+		{Label: "上边距", Value: fmt.Sprintf("%d", readingMarginTop())},
+		{Label: "下边距", Value: fmt.Sprintf("%d", readingMarginBottom())},
+		{Label: "行间距", Value: fmt.Sprintf("%d", readingLineSpacing())},
+		{Label: "字体颜色", Value: colorValue},
+		{Label: "高对比", Value: onOffText(app.config != nil && app.config.ReadingHighContrast)},
+	}
+}
+
+func onOffText(value bool) string {
+	if value {
+		return "开"
+	}
+	return "关"
 }
 
 func padDisplayText(value string, width int) string {
@@ -1329,47 +1420,18 @@ func buildBookshelfPanel() string {
 		return strings.Join(lines, "\n")
 	}
 	if len(books) == 0 {
-		switch th.Name {
-		case "jetbrains":
-			lines = append(lines,
-				"当前工作区里还没有书籍索引。",
-				"",
-				"开始方式：",
-				"  1. 按 i 导入本地 txt / epub",
-				"  2. 或直接运行 readcli /path/to/book.epub",
-				"",
-				"导入后会同步：",
-				"  - 阅读位置",
-				"  - 当前章节",
-				"  - 最近阅读时间",
-			)
-		case "ops-console":
-			lines = append(lines,
-				"当前没有待处理阅读条目。",
-				"",
-				"接入方式：",
-				"  1. 按 i 导入本地 txt / epub",
-				"  2. 或直接运行 readcli /path/to/book.epub",
-				"",
-				"接入后会跟踪：",
-				"  - 阅读进度",
-				"  - 当前章节",
-				"  - 最近活跃时间",
-			)
-		default:
-			lines = append(lines,
-				"还没有导入任何书。",
-				"",
-				"开始方式：",
-				"  1. 按 i 导入本地 txt / epub",
-				"  2. 或直接运行 readcli /path/to/book.epub",
-				"",
-				"导入后会自动记录：",
-				"  - 阅读进度",
-				"  - 最后阅读时间",
-				"  - 当前章节信息",
-			)
-		}
+		lines = append(lines,
+			"还没有导入任何书。",
+			"",
+			"开始方式：",
+			"  1. 按 i 导入本地 txt / epub",
+			"  2. 或直接运行 readcli /path/to/book.epub",
+			"",
+			"导入后会自动记录：",
+			"  - 阅读进度",
+			"  - 最后阅读时间",
+			"  - 当前章节信息",
+		)
 		return strings.Join(lines, "\n")
 	}
 
@@ -1893,6 +1955,12 @@ func setDisplayLines(lines int) {
 	app.displayLines = lines
 	app.config.DisplayLines = lines
 	_ = lib.SaveConfig(app.config)
+	visible := readingVisibleSourceLines()
+	if visible < app.displayLines {
+		app.statusMessage = fmt.Sprintf("每页正文 %d 行（当前窗口最多显示 %d 行）", app.displayLines, visible)
+	} else {
+		app.statusMessage = fmt.Sprintf("每页正文 %d 行", visible)
+	}
 	syncCurrentBookState()
 }
 
@@ -1923,6 +1991,105 @@ func pageStep() int {
 		return 1
 	}
 	return readingVisibleSourceLines()
+}
+
+func openReadingSettings() {
+	setMode(modeReadingSettings)
+	app.settingsIndex = 0
+	app.statusMessage = "已打开阅读设置"
+}
+
+func moveReadingSettings(delta int) {
+	items := readingSettingsItems()
+	if len(items) == 0 {
+		app.settingsIndex = 0
+		return
+	}
+	app.settingsIndex += delta
+	if app.settingsIndex < 0 {
+		app.settingsIndex = 0
+	}
+	if app.settingsIndex >= len(items) {
+		app.settingsIndex = len(items) - 1
+	}
+}
+
+func adjustReadingSetting(delta int) {
+	if app == nil || app.config == nil {
+		return
+	}
+	switch app.settingsIndex {
+	case 0:
+		app.config.ReadingContentWidthRatio += float64(delta) * 0.05
+		if app.config.ReadingContentWidthRatio < 0.4 {
+			app.config.ReadingContentWidthRatio = 0.4
+		}
+		if app.config.ReadingContentWidthRatio > 1 {
+			app.config.ReadingContentWidthRatio = 1
+		}
+	case 1:
+		app.config.ReadingMarginLeft = max(0, app.config.ReadingMarginLeft+delta)
+	case 2:
+		app.config.ReadingMarginRight = max(0, app.config.ReadingMarginRight+delta)
+	case 3:
+		app.config.ReadingMarginTop = max(0, app.config.ReadingMarginTop+delta)
+	case 4:
+		app.config.ReadingMarginBottom = max(0, app.config.ReadingMarginBottom+delta)
+	case 5:
+		app.config.ReadingLineSpacing = max(0, app.config.ReadingLineSpacing+delta)
+	}
+	_ = lib.SaveConfig(app.config)
+	if app.reader != nil {
+		applyLayoutFromTerminal()
+	}
+	app.statusMessage = "阅读设置已更新"
+}
+
+func activateReadingSetting() {
+	if app == nil || app.config == nil {
+		return
+	}
+	switch app.settingsIndex {
+	case 6:
+		app.mode = modeReadingColorInput
+		app.inputValue = app.config.ReadingTextColor
+		app.inputCursor = len([]rune(app.inputValue))
+	case 7:
+		app.config.ReadingHighContrast = !app.config.ReadingHighContrast
+		_ = lib.SaveConfig(app.config)
+		app.statusMessage = "高对比已切换"
+	}
+}
+
+func applyReadingTextColorInput() {
+	value := lib.NormalizeConfiguredColor(app.inputValue)
+	if value == "" {
+		app.statusMessage = "颜色格式无效"
+		return
+	}
+	app.config.ReadingTextColor = value
+	app.mode = modeReadingSettings
+	resetInputState()
+	_ = lib.SaveConfig(app.config)
+	app.statusMessage = "字体颜色已更新"
+}
+
+func cycleReadingColorPreset() {
+	if app == nil || app.config == nil {
+		return
+	}
+	palette := []string{"#FFFFFF", "#7FDBFF", "#FFDC00", "#2ECC40", "#F012BE"}
+	current := lib.NormalizeConfiguredColor(app.config.ReadingTextColor)
+	index := -1
+	for i, item := range palette {
+		if item == current {
+			index = i
+			break
+		}
+	}
+	app.config.ReadingTextColor = palette[(index+1+len(palette))%len(palette)]
+	_ = lib.SaveConfig(app.config)
+	app.statusMessage = "字体颜色已切换为 " + app.config.ReadingTextColor
 }
 
 func switchTheme() {
