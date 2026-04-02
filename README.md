@@ -272,6 +272,10 @@ readcli -n 8 /path/to/book.epub
 * [CHANGELOG](./CHANGELOG.md)
 * [CONTRIBUTING](./CONTRIBUTING.md)
 
+## 友链
+
+* [linux.do](https://linux.do/)
+
 ## 协议
 
 项目继续遵循 [Apache License 2.0](./LICENSE)。
