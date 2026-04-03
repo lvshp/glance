@@ -2,6 +2,8 @@ package lib
 
 import (
 	"archive/tar"
+	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"errors"
@@ -104,7 +106,8 @@ func SelectReleaseAsset(release *ReleaseInfo, goos, goarch string) *ReleaseAsset
 	prefix := fmt.Sprintf("readcli-%s-%s-", goos, goarch)
 	for i := range release.Assets {
 		asset := &release.Assets[i]
-		if strings.HasPrefix(asset.Name, prefix) && strings.HasSuffix(asset.Name, ".tar.gz") {
+		if strings.HasPrefix(asset.Name, prefix) &&
+			(strings.HasSuffix(asset.Name, ".tar.gz") || strings.HasSuffix(asset.Name, ".zip")) {
 			return asset
 		}
 	}
@@ -140,8 +143,12 @@ func InstallLatestReleaseAsset(version, url, executablePath string) error {
 		return fmt.Errorf("下载更新失败: %s", resp.Status)
 	}
 
-	execDir := filepath.Dir(executablePath)
-	archivePath := filepath.Join(tempDir, "readcli-update.tar.gz")
+	isZip := strings.HasSuffix(url, ".zip")
+	archiveExt := ".tar.gz"
+	if isZip {
+		archiveExt = ".zip"
+	}
+	archivePath := filepath.Join(tempDir, "readcli-update"+archiveExt)
 	archiveFile, err := os.Create(archivePath)
 	if err != nil {
 		return err
@@ -161,7 +168,12 @@ func InstallLatestReleaseAsset(version, url, executablePath string) error {
 	if statErr == nil {
 		fileMode = info.Mode()
 	}
-	binaryPath := filepath.Join(tempDir, "readcli")
+
+	binaryName := "readcli"
+	if isZip {
+		binaryName = "readcli.exe"
+	}
+	binaryPath := filepath.Join(tempDir, binaryName)
 	binaryFile, err := os.Create(binaryPath)
 	if err != nil {
 		cleanup = false
@@ -173,13 +185,19 @@ func InstallLatestReleaseAsset(version, url, executablePath string) error {
 		cleanup = false
 		return &UpdateInstallError{Message: "打开更新包失败: " + err.Error(), TempDir: tempDir}
 	}
-	if err := extractBinaryFromTarGz(archiveReader, binaryFile); err != nil {
-		archiveReader.Close()
-		binaryFile.Close()
-		cleanup = false
-		return &UpdateInstallError{Message: err.Error(), TempDir: tempDir}
+
+	var extractErr error
+	if isZip {
+		extractErr = extractBinaryFromZip(archiveReader, binaryFile)
+	} else {
+		extractErr = extractBinaryFromTarGz(archiveReader, binaryFile)
 	}
 	archiveReader.Close()
+	if extractErr != nil {
+		binaryFile.Close()
+		cleanup = false
+		return &UpdateInstallError{Message: extractErr.Error(), TempDir: tempDir}
+	}
 	if err := binaryFile.Chmod(fileMode); err != nil {
 		binaryFile.Close()
 		cleanup = false
@@ -190,6 +208,7 @@ func InstallLatestReleaseAsset(version, url, executablePath string) error {
 		return &UpdateInstallError{Message: "关闭更新文件失败: " + err.Error(), TempDir: tempDir}
 	}
 
+	execDir := filepath.Dir(executablePath)
 	if probe, err := os.CreateTemp(execDir, "readcli-write-test-*"); err != nil {
 		cleanup = false
 		return &UpdateInstallError{Message: "当前二进制目录不可写，无法自动覆盖", TempDir: tempDir}
@@ -224,6 +243,7 @@ func CurrentPlatformSupported() bool {
 			{Name: "readcli-darwin-amd64-v0.0.0.tar.gz"},
 			{Name: "readcli-darwin-arm64-v0.0.0.tar.gz"},
 			{Name: "readcli-linux-amd64-v0.0.0.tar.gz"},
+			{Name: "readcli-windows-amd64-v0.0.0.zip"},
 		},
 	}, runtime.GOOS, runtime.GOARCH)
 	return asset != nil
@@ -254,6 +274,41 @@ func extractBinaryFromTarGz(source io.Reader, target io.Writer) error {
 		_, err = io.Copy(target, tarReader)
 		return err
 	}
+}
+
+func extractBinaryFromZip(source io.Reader, target io.Writer) error {
+	reader, ok := source.(io.ReaderAt)
+	size := int64(0)
+	if !ok {
+		data, err := io.ReadAll(source)
+		if err != nil {
+			return err
+		}
+		reader = bytes.NewReader(data)
+		size = int64(len(data))
+	} else {
+		size = 1 << 30
+	}
+	zipReader, err := zip.NewReader(reader, size)
+	if err != nil {
+		return err
+	}
+	for _, f := range zipReader.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		if filepath.Base(f.Name) != "readcli.exe" {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(target, rc)
+		rc.Close()
+		return err
+	}
+	return errors.New("更新包中未找到 readcli.exe 可执行文件")
 }
 
 func parseSemverLike(version string) ([3]int, bool) {
