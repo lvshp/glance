@@ -447,7 +447,7 @@ func buildUpdatePromptPanel() string {
 	for _, line := range wrapDisplayLines(body, max(28, mainContentWidth-4)) {
 		lines = append(lines, "  "+line)
 	}
-	lines = append(lines, "", "按 y / Enter 开始更新，按 n / Esc 稍后再说。")
+	lines = append(lines, "", "j/k 上下翻页，y/Enter 开始更新，n/Esc 稍后再说。")
 	if !app.updatePromptManual {
 		lines = append(lines, "如果这次选择不更新，之后启动时不会再提醒这个版本。")
 	} else {

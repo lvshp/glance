@@ -174,6 +174,14 @@ func refreshChrome() {
 
 	textColor := currentReadingTextColor()
 	main.SetTextColor(textColor)
+
+	switch app.mode {
+	case modeUpdatePrompt:
+		main.SetScrollable(true)
+		main.ScrollToBeginning()
+	default:
+		main.SetScrollable(false)
+	}
 }
 
 func applyBossChrome(th theme) {

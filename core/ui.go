@@ -117,7 +117,9 @@ func Run(initialFile string, requestedLines int, version string) {
 		case modeDeleteConfirm:
 			handleDeleteConfirmEvent(id)
 		case modeUpdatePrompt:
-			handleUpdatePromptEvent(id)
+			if !scrollUpdatePrompt(id) {
+				handleUpdatePromptEvent(id)
+			}
 		case modeUpdating:
 			handleUpdatingEvent(id)
 		case modeUpdateRestart:

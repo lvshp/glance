@@ -241,6 +241,34 @@ func handleUpdatePromptEvent(id string) {
 	}
 }
 
+func scrollUpdatePrompt(id string) bool {
+	switch id {
+	case "j", "<Down>", " ", "<Ctrl-n>":
+		row, col := main.GetScrollOffset()
+		main.ScrollTo(row+1, col)
+		return true
+	case "k", "<Up>", "<Ctrl-p>":
+		row, col := main.GetScrollOffset()
+		main.ScrollTo(row-1, col)
+		return true
+	case "<Ctrl-d>", "<PageDown>":
+		row, col := main.GetScrollOffset()
+		main.ScrollTo(row+mainContentHeight-2, col)
+		return true
+	case "<Ctrl-u>", "<PageUp>":
+		row, col := main.GetScrollOffset()
+		main.ScrollTo(row-mainContentHeight+2, col)
+		return true
+	case "G":
+		main.ScrollToEnd()
+		return true
+	case "g":
+		main.ScrollToBeginning()
+		return true
+	}
+	return false
+}
+
 func handleUpdatingEvent(id string) {
 	switch id {
 	case "q", "<C-c>":
