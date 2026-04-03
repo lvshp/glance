@@ -2,6 +2,7 @@ package lib
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"compress/gzip"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -102,9 +104,10 @@ func SelectReleaseAsset(release *ReleaseInfo, goos, goarch string) *ReleaseAsset
 		return nil
 	}
 	prefix := fmt.Sprintf("readcli-%s-%s-", goos, goarch)
+	suffix := releaseArchiveSuffix(goos)
 	for i := range release.Assets {
 		asset := &release.Assets[i]
-		if strings.HasPrefix(asset.Name, prefix) && strings.HasSuffix(asset.Name, ".tar.gz") {
+		if strings.HasPrefix(asset.Name, prefix) && strings.HasSuffix(asset.Name, suffix) {
 			return asset
 		}
 	}
@@ -112,6 +115,7 @@ func SelectReleaseAsset(release *ReleaseInfo, goos, goarch string) *ReleaseAsset
 }
 
 func InstallLatestReleaseAsset(version, url, executablePath string) error {
+	goos := runtime.GOOS
 	tempDir, err := os.MkdirTemp("", "readcli-update-*")
 	if err != nil {
 		return err
@@ -141,7 +145,7 @@ func InstallLatestReleaseAsset(version, url, executablePath string) error {
 	}
 
 	execDir := filepath.Dir(executablePath)
-	archivePath := filepath.Join(tempDir, "readcli-update.tar.gz")
+	archivePath := filepath.Join(tempDir, "readcli-update"+releaseArchiveSuffix(goos))
 	archiveFile, err := os.Create(archivePath)
 	if err != nil {
 		return err
@@ -161,42 +165,24 @@ func InstallLatestReleaseAsset(version, url, executablePath string) error {
 	if statErr == nil {
 		fileMode = info.Mode()
 	}
-	binaryPath := filepath.Join(tempDir, "readcli")
-	binaryFile, err := os.Create(binaryPath)
-	if err != nil {
-		cleanup = false
-		return &UpdateInstallError{Message: "创建临时二进制失败: " + err.Error(), TempDir: tempDir}
-	}
-	archiveReader, err := os.Open(archivePath)
-	if err != nil {
-		binaryFile.Close()
-		cleanup = false
-		return &UpdateInstallError{Message: "打开更新包失败: " + err.Error(), TempDir: tempDir}
-	}
-	if err := extractBinaryFromTarGz(archiveReader, binaryFile); err != nil {
-		archiveReader.Close()
-		binaryFile.Close()
+	binaryPath := filepath.Join(tempDir, releaseBinaryName(goos))
+	if err := extractBinaryFromArchive(archivePath, binaryPath, goos, fileMode); err != nil {
 		cleanup = false
 		return &UpdateInstallError{Message: err.Error(), TempDir: tempDir}
 	}
-	archiveReader.Close()
-	if err := binaryFile.Chmod(fileMode); err != nil {
-		binaryFile.Close()
+
+	if err := verifyExecutableDirWritable(execDir); err != nil {
 		cleanup = false
-		return &UpdateInstallError{Message: "设置更新文件权限失败: " + err.Error(), TempDir: tempDir}
-	}
-	if err := binaryFile.Close(); err != nil {
-		cleanup = false
-		return &UpdateInstallError{Message: "关闭更新文件失败: " + err.Error(), TempDir: tempDir}
+		return &UpdateInstallError{Message: err.Error(), TempDir: tempDir}
 	}
 
-	if probe, err := os.CreateTemp(execDir, "readcli-write-test-*"); err != nil {
+	if goos == "windows" {
+		if err := stageWindowsReplacement(binaryPath, executablePath, tempDir); err != nil {
+			cleanup = false
+			return &UpdateInstallError{Message: err.Error(), TempDir: tempDir}
+		}
 		cleanup = false
-		return &UpdateInstallError{Message: "当前二进制目录不可写，无法自动覆盖", TempDir: tempDir}
-	} else {
-		probePath := probe.Name()
-		probe.Close()
-		_ = os.Remove(probePath)
+		return nil
 	}
 
 	if err := os.Rename(binaryPath, executablePath); err != nil {
@@ -224,9 +210,86 @@ func CurrentPlatformSupported() bool {
 			{Name: "readcli-darwin-amd64-v0.0.0.tar.gz"},
 			{Name: "readcli-darwin-arm64-v0.0.0.tar.gz"},
 			{Name: "readcli-linux-amd64-v0.0.0.tar.gz"},
+			{Name: "readcli-windows-amd64-v0.0.0.zip"},
 		},
 	}, runtime.GOOS, runtime.GOARCH)
 	return asset != nil
+}
+
+func releaseBinaryName(goos string) string {
+	if goos == "windows" {
+		return "readcli.exe"
+	}
+	return "readcli"
+}
+
+func releaseArchiveSuffix(goos string) string {
+	if goos == "windows" {
+		return ".zip"
+	}
+	return ".tar.gz"
+}
+
+func extractBinaryFromArchive(archivePath, targetPath, goos string, fileMode os.FileMode) error {
+	if goos == "windows" {
+		return extractBinaryFromZip(archivePath, targetPath, releaseBinaryName(goos))
+	}
+
+	out, err := os.Create(targetPath)
+	if err != nil {
+		return fmt.Errorf("创建临时二进制失败: %w", err)
+	}
+	defer out.Close()
+
+	archiveReader, err := os.Open(archivePath)
+	if err != nil {
+		return fmt.Errorf("打开更新包失败: %w", err)
+	}
+	defer archiveReader.Close()
+
+	if err := extractBinaryFromTarGz(archiveReader, out); err != nil {
+		return err
+	}
+	if err := out.Chmod(fileMode); err != nil {
+		return fmt.Errorf("设置更新文件权限失败: %w", err)
+	}
+	return nil
+}
+
+func verifyExecutableDirWritable(execDir string) error {
+	if probe, err := os.CreateTemp(execDir, "readcli-write-test-*"); err != nil {
+		return errors.New("当前二进制目录不可写，无法自动覆盖")
+	} else {
+		probePath := probe.Name()
+		probe.Close()
+		_ = os.Remove(probePath)
+	}
+	return nil
+}
+
+func stageWindowsReplacement(binaryPath, executablePath, tempDir string) error {
+	scriptPath := filepath.Join(tempDir, "replace.cmd")
+	script := fmt.Sprintf(`@echo off
+setlocal
+set "TARGET=%s"
+set "SOURCE=%s"
+:retry
+move /Y "%%SOURCE%%" "%%TARGET%%" >nul 2>&1
+if errorlevel 1 (
+  timeout /t 1 /nobreak >nul
+  goto retry
+)
+endlocal
+`, executablePath, binaryPath)
+	if err := os.WriteFile(scriptPath, []byte(script), 0644); err != nil {
+		return fmt.Errorf("写入更新脚本失败: %w", err)
+	}
+
+	cmd := exec.Command("cmd.exe", "/C", "start", "", "/MIN", scriptPath)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("启动更新脚本失败: %w", err)
+	}
+	return nil
 }
 
 func extractBinaryFromTarGz(source io.Reader, target io.Writer) error {
@@ -254,6 +317,37 @@ func extractBinaryFromTarGz(source io.Reader, target io.Writer) error {
 		_, err = io.Copy(target, tarReader)
 		return err
 	}
+}
+
+func extractBinaryFromZip(archivePath, targetPath, binaryName string) error {
+	reader, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	for _, file := range reader.File {
+		if filepath.Base(file.Name) != binaryName {
+			continue
+		}
+		rc, err := file.Open()
+		if err != nil {
+			return err
+		}
+		defer rc.Close()
+
+		out, err := os.Create(targetPath)
+		if err != nil {
+			return fmt.Errorf("创建临时二进制失败: %w", err)
+		}
+		defer out.Close()
+
+		if _, err := io.Copy(out, rc); err != nil {
+			return err
+		}
+		return nil
+	}
+	return errors.New("更新包中未找到 readcli 可执行文件")
 }
 
 func parseSemverLike(version string) ([3]int, bool) {

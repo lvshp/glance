@@ -10,6 +10,7 @@ release:
 		# Clean
 		go clean
 		rm -rf *.gz
+		rm -rf *.zip
 		# Build for mac
 		GO111MODULE=on go build -o ${BINARY} -ldflags "-s -w -X main.Version=${VERSION}"
 		tar czvf ${BINARY}-mac64-${VERSION}.tar.gz ./${BINARY}
@@ -17,9 +18,14 @@ release:
 		go clean
 		CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -o ${BINARY} -ldflags "-s -w -X main.Version=${VERSION}"
 		tar czvf ${BINARY}-linux64-${VERSION}.tar.gz ./${BINARY}
+		# Build for windows
+		go clean
+		CGO_ENABLED=0 GOOS=windows GOARCH=amd64 GO111MODULE=on go build -o ${BINARY}.exe -ldflags "-s -w -X main.Version=${VERSION}"
+		zip ${BINARY}-windows64-${VERSION}.zip ./${BINARY}.exe
 # Cleans our projects: deletes binaries
 clean:
 		go clean
 		rm -rf *.gz
+		rm -rf *.zip
 
 .PHONY:  clean build

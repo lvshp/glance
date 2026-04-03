@@ -22,6 +22,8 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: amd64
+          - goos: windows
+            goarch: amd64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,14 +42,23 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: |
           mkdir -p dist
-          GO111MODULE=on go build -o dist/readcli -ldflags "-s -w -X main.Version=${VERSION}" ./cmd
-          tar czf "dist/readcli-${GOOS}-${GOARCH}-${VERSION}.tar.gz" -C dist readcli
+          if [ "$GOOS" = "windows" ]; then
+            GO111MODULE=on go build -o dist/readcli.exe -ldflags "-s -w -X main.Version=${VERSION}" ./cmd
+            cd dist
+            zip -q "readcli-${GOOS}-${GOARCH}-${VERSION}.zip" readcli.exe
+            cd ..
+          else
+            GO111MODULE=on go build -o dist/readcli -ldflags "-s -w -X main.Version=${VERSION}" ./cmd
+            tar czf "dist/readcli-${GOOS}-${GOARCH}-${VERSION}.tar.gz" -C dist readcli
+          fi
 
       - name: Upload archive artifact
         uses: actions/upload-artifact@v4
         with:
           name: readcli-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/readcli-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}.tar.gz
+          path: |
+            dist/readcli-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}.tar.gz
+            dist/readcli-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}.zip
 
   publish:
     name: Publish Release
@@ -63,8 +74,9 @@ jobs:
         run: |
           mkdir -p release
           find dist -name '*.tar.gz' -exec cp {} release/ \;
+          find dist -name '*.zip' -exec cp {} release/ \;
           cd release
-          sha256sum *.tar.gz > sha256sum.txt
+          sha256sum *.tar.gz *.zip > sha256sum.txt
 
       - name: Upload assets to release
         uses: softprops/action-gh-release@v2
@@ -72,4 +84,5 @@ jobs:
           name: ${{ github.ref_name }}
           files: |
             release/*.tar.gz
+            release/*.zip
             release/sha256sum.txt

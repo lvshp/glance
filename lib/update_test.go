@@ -40,6 +40,7 @@ func TestSelectReleaseAsset(t *testing.T) {
 			{Name: "readcli-darwin-amd64-v0.1.2.tar.gz"},
 			{Name: "readcli-darwin-arm64-v0.1.2.tar.gz"},
 			{Name: "readcli-linux-amd64-v0.1.2.tar.gz"},
+			{Name: "readcli-windows-amd64-v0.1.2.zip"},
 		},
 	}
 
@@ -50,6 +51,11 @@ func TestSelectReleaseAsset(t *testing.T) {
 
 	if missing := SelectReleaseAsset(release, "linux", "arm64"); missing != nil {
 		t.Fatalf("expected no asset, got %+v", missing)
+	}
+
+	windowsAsset := SelectReleaseAsset(release, "windows", "amd64")
+	if windowsAsset == nil || windowsAsset.Name != "readcli-windows-amd64-v0.1.2.zip" {
+		t.Fatalf("unexpected windows asset: %+v", windowsAsset)
 	}
 }
 

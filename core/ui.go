@@ -1590,6 +1590,11 @@ func buildUpdatePromptPanel() string {
 	if body == "" {
 		body = "本次版本未提供额外说明。"
 	}
+	confirmText := "是否现在下载并替换当前程序？"
+	restartText := "更新完成后退出，再重新启动即可生效。"
+	if runtime.GOOS == "windows" {
+		restartText = "Windows 下会先下载并准备替换；退出程序后等待几秒，再重新启动即可生效。"
+	}
 	lines := []string{
 		"发现新版本",
 		"",
@@ -1597,8 +1602,8 @@ func buildUpdatePromptPanel() string {
 		fmt.Sprintf("最新版本：%s", app.updateRelease.TagName),
 		fmt.Sprintf("当前二进制：%s", emptyFallback(shortenDisplay(lib.CurrentExecutablePath(), 56), "未知")),
 		"",
-		"是否现在下载并替换当前程序？",
-		"更新完成后退出，再重新启动即可生效。",
+		confirmText,
+		restartText,
 		"",
 		"更新说明：",
 	}
@@ -1619,13 +1624,19 @@ func buildUpdatingPanel() string {
 	if app.updateRelease != nil && app.updateRelease.TagName != "" {
 		version = app.updateRelease.TagName
 	}
+	progressText := "ReadCLI 正在从 GitHub Releases 下载并替换当前程序。"
+	finishText := "更新完成后会提示你退出并重新启动生效。"
+	if runtime.GOOS == "windows" {
+		progressText = "ReadCLI 正在从 GitHub Releases 下载更新，并准备在退出后替换当前程序。"
+		finishText = "Windows 下退出当前程序后会继续完成替换，等待几秒再重新启动即可。"
+	}
 	return strings.Join([]string{
 		"正在安装更新",
 		"",
 		"目标版本：" + version,
 		"",
-		"ReadCLI 正在从 GitHub Releases 下载并替换当前程序。",
-		"更新完成后会提示你退出并重新启动生效。",
+		progressText,
+		finishText,
 	}, "\n")
 }
 
@@ -1634,12 +1645,16 @@ func buildUpdateRestartPanel() string {
 	if app.updateRelease != nil && app.updateRelease.TagName != "" {
 		version = app.updateRelease.TagName
 	}
+	restartText := "请退出当前程序，然后重新启动 ReadCLI。"
+	if runtime.GOOS == "windows" {
+		restartText = "请先退出当前程序，等待几秒让 Windows 完成替换，再重新启动 ReadCLI。"
+	}
 	return strings.Join([]string{
 		"更新已安装",
 		"",
 		"已完成热更新：" + version,
 		"",
-		"请退出当前程序，然后重新启动 ReadCLI。",
+		restartText,
 		"",
 		"按 Enter 退出。",
 	}, "\n")
@@ -2496,11 +2511,20 @@ func runConfiguredBossProgram() bool {
 	}
 
 	ui.Close()
-	shell := strings.TrimSpace(os.Getenv("SHELL"))
-	if shell == "" {
-		shell = "/bin/sh"
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		shell := strings.TrimSpace(os.Getenv("COMSPEC"))
+		if shell == "" {
+			shell = "cmd.exe"
+		}
+		cmd = exec.Command(shell, "/C", command)
+	} else {
+		shell := strings.TrimSpace(os.Getenv("SHELL"))
+		if shell == "" {
+			shell = "/bin/sh"
+		}
+		cmd = exec.Command(shell, "-lc", command)
 	}
-	cmd := exec.Command(shell, "-lc", command)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

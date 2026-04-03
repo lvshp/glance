@@ -118,6 +118,7 @@ Currently provided:
 * macOS arm64
 * macOS amd64
 * Linux amd64
+* Windows amd64
 
 Build from source:
 
@@ -153,6 +154,8 @@ Expected output:
 ```bash
 /Users/your-name/.local/bin/readcli
 ```
+
+On Windows, download `readcli-windows-amd64-*.zip` from Releases, extract it, and run `readcli.exe`.
 
 Or open a book directly:
 
