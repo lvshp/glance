@@ -139,6 +139,7 @@ func defaultConfig() *Config {
 		Theme:                    "vscode",
 		DisplayLines:             8,
 		ShowBorder:               true,
+		BossKeyCommand:           "",
 		ForceBasicColor:          false,
 		AutoPageIntervalMs:       3500,
 		ReadingContentWidthRatio: 0.75,

@@ -19,6 +19,7 @@ import (
 var (
 	reBlockTags  = regexp.MustCompile(`(?is)</?(p|div|section|article|h[1-6]|li|blockquote|tr|td|br)[^>]*>`)
 	reAllTags    = regexp.MustCompile(`(?is)<[^>]+>`)
+	reRawBlocks  = regexp.MustCompile(`(?is)<style[^>]*>.*?</style>|<script[^>]*>.*?</script>`)
 	reWhitespace = regexp.MustCompile(`[\t\f\v ]+`)
 )
 
@@ -510,6 +511,7 @@ func readChapterText(file *zip.File) (string, error) {
 }
 
 func stripMarkup(text string) string {
+	text = reRawBlocks.ReplaceAllString(text, "")
 	text = reBlockTags.ReplaceAllString(text, "\n")
 	text = reAllTags.ReplaceAllString(text, "")
 	return html.UnescapeString(text)

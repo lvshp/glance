@@ -4,55 +4,7 @@ import (
 	"strings"
 
 	"github.com/TimothyYe/glance/lib"
-	ui "github.com/gizak/termui/v3"
 )
-
-func handleEvents() {
-	uiEvents := ui.PollEvents()
-	for !app.quit {
-		select {
-		case e := <-uiEvents:
-			if e.ID == "<Resize>" {
-				payload := e.Payload.(ui.Resize)
-				applyLayout(payload.Width, payload.Height)
-				renderUI()
-				continue
-			}
-
-			switch app.mode {
-			case modeHome:
-				handleHomeEvent(e.ID)
-			case modeReading:
-				handleReadingEvent(e.ID)
-			case modeTOC:
-				handleTOCEvent(e.ID)
-			case modeBookmarks:
-				handleBookmarkEvent(e.ID)
-			case modeSearchInput:
-				handleTextInputEvent(e.ID, runSearch)
-			case modeImportInput:
-				handleTextInputEvent(e.ID, importBook)
-			case modeReadingSettings:
-				handleReadingSettingsEvent(e.ID)
-			case modeReadingColorInput:
-				handleTextInputEvent(e.ID, applyReadingTextColorInput)
-			case modeDeleteConfirm:
-				handleDeleteConfirmEvent(e.ID)
-			case modeUpdatePrompt:
-				handleUpdatePromptEvent(e.ID)
-			case modeUpdating:
-				handleUpdatingEvent(e.ID)
-			case modeUpdateRestart:
-				handleUpdateRestartEvent(e.ID)
-			}
-
-			renderUI()
-		case message := <-app.updateMessages:
-			handleUpdateMessage(message)
-			renderUI()
-		}
-	}
-}
 
 func handleHomeEvent(id string) {
 	switch id {
@@ -127,24 +79,6 @@ func handleReadingEvent(id string) {
 	case "]", "<Right>":
 		app.reader.NextChapter()
 		syncCurrentBookState()
-	case "G":
-		if app.rowNumber == "" {
-			app.reader.Last()
-		} else {
-			if num, err := lib.ParseRowNum(app.rowNumber); err == nil {
-				app.reader.Goto(num)
-			}
-			app.rowNumber = ""
-		}
-		syncCurrentBookState()
-	case "g":
-		if app.rowNumber == "g" {
-			app.reader.First()
-			app.rowNumber = ""
-			syncCurrentBookState()
-		} else {
-			app.rowNumber = "g"
-		}
 	case "+", "=":
 		setDisplayLines(app.displayLines + 1)
 	case "-", "_":

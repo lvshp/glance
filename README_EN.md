@@ -6,7 +6,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/lvshp/ReadCLI/go.yml?branch=main&label=CI)](https://github.com/lvshp/ReadCLI/actions/workflows/go.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-ReadCLI is a terminal ebook reader with support for `TXT` and `EPUB`, plus a local bookshelf, saved progress, bookmarks, search, and several IDE-style themes.
+ReadCLI is a terminal ebook reader with support for `TXT` and `EPUB`, plus a local bookshelf, saved progress, bookmarks, search, and several IDE-style themes. Built with [tcell](https://github.com/gdamore/tcell) and [tview](https://github.com/rivo/tview), it supports macOS, Linux, and Windows.
 
 ## Screenshots
 
@@ -48,6 +48,7 @@ ReadCLI is a terminal ebook reader with support for `TXT` and `EPUB`, plus a loc
 * Page scrolling and configurable visible text lines per page
 * Adjustable content width, margins, top padding, line spacing, text color, high contrast mode, basic color mode, and auto-page interval
 * Reflows text based on terminal width and wide-character display width
+* Cross-platform: macOS, Linux, Windows Terminal
 
 ### Bookshelf
 
@@ -59,9 +60,6 @@ ReadCLI is a terminal ebook reader with support for `TXT` and `EPUB`, plus a loc
 * Filter by format and reading status
 * Remove from bookshelf only, or remove and delete the local file
 * Main bookshelf list focuses on titles, while the right panel shows details
-* Uses EPUB metadata or extracted content title when available, otherwise falls back to filename
-* Cleans up common source suffixes such as `Z-Library`
-
 ### UI and Interaction
 
 * Three themes: `vscode`, `jetbrains`, `ops-console`
@@ -76,7 +74,17 @@ ReadCLI is a terminal ebook reader with support for `TXT` and `EPUB`, plus a loc
 
 ## Terminal Compatibility
 
-ReadCLI does not depend on macOS or iTerm-specific layout behavior. It works with common Linux terminals too, for example:
+ReadCLI is built with tcell v2, which natively supports Unicode borders and CJK character width, providing good cross-platform compatibility.
+
+### macOS
+
+* `iTerm2`
+* `Terminal.app`
+* `WezTerm`
+* `Alacritty`
+* `Kitty`
+
+### Linux
 
 * `gnome-terminal`
 * `kitty`
@@ -84,6 +92,11 @@ ReadCLI does not depend on macOS or iTerm-specific layout behavior. It works wit
 * `alacritty`
 * `xterm`
 * `tmux` / `screen`
+
+### Windows
+
+* `Windows Terminal`
+* `PowerShell` 7+ (terminal host)
 
 The main differences come from terminal capabilities:
 
@@ -118,6 +131,7 @@ Currently provided:
 * macOS arm64
 * macOS amd64
 * Linux amd64
+* Windows amd64
 
 Build from source:
 
@@ -126,6 +140,14 @@ git clone https://github.com/lvshp/ReadCLI.git
 cd ReadCLI
 go build -o readcli ./cmd
 ```
+
+Cross-compile for Windows:
+
+```bash
+GOOS=windows GOARCH=amd64 go build -o readcli.exe ./cmd
+```
+
+> Requires Go 1.24+
 
 If the binary is already in your `PATH`, just run:
 
@@ -218,7 +240,9 @@ If you want the Boss Key to run an external command instead, set `boss_key_comma
 }
 ```
 
-You can also provide a full command with arguments:
+You can also provide a full command with arguments.
+
+macOS / Linux example:
 
 ```json
 {
@@ -226,7 +250,17 @@ You can also provide a full command with arguments:
 }
 ```
 
+Windows example:
+
+```json
+{
+  "boss_key_command": "genact.exe"
+}
+```
+
 After that, pressing `b` temporarily leaves the ReadCLI UI, runs the configured command in the current terminal, and returns to ReadCLI when that command exits.
+
+Note: The command must be installed and runnable on your system.
 
 Recommended project:
 [svenstaro/genact](https://github.com/svenstaro/genact)
@@ -267,9 +301,10 @@ Press `?` to open the built-in help page. Both Vim-style keys and arrow keys are
 
 Local data is stored by default in:
 
-```bash
-~/.readcli/
-```
+* macOS / Linux: `~/.readcli/`
+* Windows: `%USERPROFILE%\.readcli\` (typically `C:\Users\<username>\.readcli\`)
+
+You can also set the `READCLI_DATA_DIR` environment variable to use a custom path.
 
 This directory contains:
 

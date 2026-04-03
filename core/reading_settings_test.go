@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/TimothyYe/glance/lib"
-	"github.com/gizak/termui/v3/widgets"
 )
 
 func TestReadingVisibleSourceLinesUsesDisplayLinesDirectly(t *testing.T) {
@@ -17,8 +16,8 @@ func TestReadingVisibleSourceLinesUsesDisplayLinesDirectly(t *testing.T) {
 			ReadingLineSpacing:  1,
 		},
 	}
-	mainPanel = widgets.NewParagraph()
-	mainPanel.SetRect(0, 0, 100, 30)
+	mainContentWidth = 98
+	mainContentHeight = 28
 
 	if got := readingVisibleSourceLines(); got != 6 {
 		t.Fatalf("readingVisibleSourceLines() = %d, want 6", got)
@@ -34,8 +33,8 @@ func TestReadingVisibleSourceLinesCapsToAvailableHeight(t *testing.T) {
 			ReadingLineSpacing:  1,
 		},
 	}
-	mainPanel = widgets.NewParagraph()
-	mainPanel.SetRect(0, 0, 60, 10)
+	mainContentWidth = 58
+	mainContentHeight = 8
 
 	got := readingVisibleSourceLines()
 	if got < 1 || got >= 20 {
