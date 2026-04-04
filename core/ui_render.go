@@ -3,8 +3,6 @@ package core
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"os/signal"
 	"regexp"
 	"runtime"
 	"strings"
@@ -322,22 +320,11 @@ func runConfiguredBossProgram() bool {
 
 	result := make(chan error, 1)
 	tApp.Suspend(func() {
-		var cmd *exec.Cmd
-		if runtime.GOOS == "windows" {
-			cmd = exec.Command("cmd.exe", "/c", command)
-		} else {
-			shell := strings.TrimSpace(os.Getenv("SHELL"))
-			if shell == "" {
-				shell = "/bin/sh"
-			}
-			cmd = exec.Command(shell, "-lc", command)
-		}
+		cmd := buildBossCommand(command)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		signal.Ignore(os.Interrupt)
 		err := cmd.Run()
-		signal.Reset(os.Interrupt)
 		result <- err
 	})
 
