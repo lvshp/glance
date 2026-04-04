@@ -218,7 +218,7 @@ func InstallLatestReleaseAsset(version, url, executablePath string) error {
 		_ = os.Remove(probePath)
 	}
 
-	if err := os.Rename(binaryPath, executablePath); err != nil {
+	if err := replaceExecutable(binaryPath, executablePath); err != nil {
 		cleanup = false
 		return &UpdateInstallError{Message: "覆盖当前二进制失败: " + err.Error(), TempDir: tempDir}
 	}
@@ -331,4 +331,28 @@ func parseSemverLike(version string) ([3]int, bool) {
 		out[i] = value
 	}
 	return out, true
+}
+
+// replaceExecutable safely replaces the old binary with the new one.
+// On Windows, the running exe is locked and cannot be directly overwritten,
+// so it is renamed to a .old file first, then the new binary is moved in.
+func replaceExecutable(newPath, oldPath string) error {
+	if runtime.GOOS != "windows" {
+		return os.Rename(newPath, oldPath)
+	}
+
+	oldBackup := oldPath + ".old"
+	_ = os.Remove(oldBackup)
+	if err := os.Rename(oldPath, oldBackup); err != nil {
+		return err
+	}
+	if err := os.Rename(newPath, oldPath); err != nil {
+		_ = os.Rename(oldBackup, oldPath)
+		return err
+	}
+	go func() {
+		time.Sleep(3 * time.Second)
+		_ = os.Remove(oldBackup)
+	}()
+	return nil
 }
