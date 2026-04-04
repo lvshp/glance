@@ -301,9 +301,8 @@ func buildFooter() string {
 	if version == "" {
 		version = "dev"
 	}
-	line1 := fmt.Sprintf("[%s](fg:black,bg:green,mod:bold)  utf-8  session [%s](fg:yellow)  theme [%s](fg:cyan)  version [%s](fg:yellow)  status [%s](fg:green)",
-		tag, elapsed, app.config.Theme, version, shorten(app.statusMessage, 22))
-	line2 := fmt.Sprintf("status: [%s](fg:cyan)", shorten(app.statusMessage, 72))
+	line1 := fmt.Sprintf("[%s](fg:black,bg:green,mod:bold)  utf-8  session [%s](fg:yellow)  theme [%s](fg:cyan)  version [%s](fg:yellow)  [%s](fg:green)",
+		tag, elapsed, app.config.Theme, version, app.statusMessage)
 	switch app.mode {
 	case modeHome:
 		return line1 + "\n[↑/↓](fg:cyan):选择  [→/Enter](fg:cyan):打开  [i](fg:cyan):导入  [o/r](fg:cyan):排序/过滤  [x](fg:cyan):移除  [T](fg:cyan):主题  [u](fg:cyan):更新  [q](fg:red):退出"
@@ -334,7 +333,7 @@ func buildFooter() string {
 	case modeUpdateRestart:
 		return line1 + "\n[Enter](fg:cyan):退出并手动重新启动  [q](fg:red):直接退出"
 	default:
-		return line1 + "\n" + line2
+		return line1 + "\n[q](fg:red):退出"
 	}
 }
 
