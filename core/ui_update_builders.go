@@ -44,14 +44,28 @@ func buildUpdatingPanel() string {
 	if app.updateRelease != nil && app.updateRelease.TagName != "" {
 		version = app.updateRelease.TagName
 	}
-	return strings.Join([]string{
+	progress := app.updateProgress
+	lines := []string{
 		"正在安装更新",
 		"",
 		"目标版本：" + version,
 		"",
+		updateProgressLabel(progress),
+	}
+	if progress.Stage == lib.UpdateStageDownload {
+		lines = append(lines, "", updateProgressBar(progress, max(18, min(48, mainContentWidth-8))))
+		if progress.Total > 0 {
+			lines = append(lines, fmt.Sprintf("%s / %s  %d%%", formatBytes(progress.Downloaded), formatBytes(progress.Total), updateProgressPercent(progress)))
+		} else if progress.Downloaded > 0 {
+			lines = append(lines, "已下载："+formatBytes(progress.Downloaded))
+		}
+	}
+	lines = append(lines,
+		"",
 		"ReadCLI 正在从 GitHub Releases 下载并替换当前程序。",
 		"更新完成后会提示你退出并重新启动生效。",
-	}, "\n")
+	)
+	return strings.Join(lines, "\n")
 }
 
 func buildUpdateRestartPanel() string {
@@ -68,4 +82,72 @@ func buildUpdateRestartPanel() string {
 		"",
 		"按 Enter 退出。",
 	}, "\n")
+}
+
+func updateProgressLabel(progress lib.UpdateProgress) string {
+	switch progress.Stage {
+	case lib.UpdateStageDownload:
+		if progress.Total > 0 {
+			return fmt.Sprintf("下载更新包：%d%%", updateProgressPercent(progress))
+		}
+		if progress.Downloaded > 0 {
+			return "下载更新包：" + formatBytes(progress.Downloaded)
+		}
+		return "下载更新包：准备中"
+	case lib.UpdateStageExtract:
+		return "解压更新包..."
+	case lib.UpdateStageReplace:
+		return "替换当前程序..."
+	default:
+		return "准备下载更新包..."
+	}
+}
+
+func updateProgressPercent(progress lib.UpdateProgress) int {
+	if progress.Total <= 0 {
+		return 0
+	}
+	percent := int(progress.Downloaded * 100 / progress.Total)
+	if percent < 0 {
+		return 0
+	}
+	if percent > 100 {
+		return 100
+	}
+	return percent
+}
+
+func updateProgressBar(progress lib.UpdateProgress, width int) string {
+	if width < 8 {
+		width = 8
+	}
+	innerWidth := width - 2
+	filled := 0
+	if progress.Total > 0 {
+		filled = int(progress.Downloaded * int64(innerWidth) / progress.Total)
+	}
+	if filled < 0 {
+		filled = 0
+	}
+	if filled > innerWidth {
+		filled = innerWidth
+	}
+	return "[" + strings.Repeat("#", filled) + strings.Repeat(".", innerWidth-filled) + "]"
+}
+
+func formatBytes(size int64) string {
+	if size < 0 {
+		size = 0
+	}
+	units := []string{"B", "KB", "MB", "GB"}
+	value := float64(size)
+	unit := units[0]
+	for i := 1; i < len(units) && value >= 1024; i++ {
+		value /= 1024
+		unit = units[i]
+	}
+	if unit == "B" {
+		return fmt.Sprintf("%d %s", size, unit)
+	}
+	return fmt.Sprintf("%.1f %s", value, unit)
 }

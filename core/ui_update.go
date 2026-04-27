@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 	"strings"
@@ -82,6 +83,9 @@ func handleUpdateMessage(message updateMessage) {
 		}
 	case updateCurrent:
 		app.statusMessage = "当前已经是最新版本"
+	case updateProgress:
+		app.updateProgress = message.Progress
+		app.statusMessage = updateProgressStatus(message.Progress)
 	}
 }
 
@@ -110,15 +114,40 @@ func startUpdateInstall() {
 	}
 
 	app.mode = modeUpdating
+	app.updateProgress = lib.UpdateProgress{Stage: lib.UpdateStageDownload}
 	app.statusMessage = "正在安装更新 " + app.updateRelease.TagName
 	renderUIIfReady()
 
 	go func(version string, release *lib.ReleaseInfo, downloadURL, exePath string) {
-		err := lib.InstallLatestReleaseAsset(version, downloadURL, exePath)
+		err := lib.InstallLatestReleaseAssetWithProgress(version, downloadURL, exePath, func(progress lib.UpdateProgress) {
+			select {
+			case app.updateMessages <- updateMessage{Kind: updateProgress, Progress: progress}:
+			default:
+			}
+		})
 		if err != nil {
 			app.updateMessages <- updateMessage{Kind: updateFailed, Err: err}
 			return
 		}
 		app.updateMessages <- updateMessage{Kind: updateInstalled, Release: release}
 	}(app.currentVersion, app.updateRelease, asset.BrowserDownloadURL, executablePath)
+}
+
+func updateProgressStatus(progress lib.UpdateProgress) string {
+	switch progress.Stage {
+	case lib.UpdateStageDownload:
+		if progress.Total > 0 {
+			return fmt.Sprintf("正在下载更新 %d%%", updateProgressPercent(progress))
+		}
+		if progress.Downloaded > 0 {
+			return "正在下载更新 " + formatBytes(progress.Downloaded)
+		}
+		return "正在下载更新..."
+	case lib.UpdateStageExtract:
+		return "正在解压更新包..."
+	case lib.UpdateStageReplace:
+		return "正在替换当前程序..."
+	default:
+		return "正在安装更新..."
+	}
 }

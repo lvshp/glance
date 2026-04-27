@@ -17,3 +17,5 @@ cmd/*.tar.gz
 dist/
 *.tar.gz
 .playwright-mcp/
+CLAUDE.md
+AGENTS.md

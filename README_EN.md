@@ -46,8 +46,10 @@ ReadCLI is a terminal ebook reader with support for `TXT` and `EPUB`, plus a loc
 * Highlights matches on the current page
 * Save, list, delete, and jump to bookmarks
 * Page scrolling and configurable visible text lines per page
+* Full reading UI and compact reading UI, with compact mode showing only the text, chapter, and progress
 * Adjustable content width, margins, top padding, line spacing, text color, high contrast mode, basic color mode, and auto-page interval
 * Reflows text based on terminal width and wide-character display width
+* Reader cache with automatic invalidation by file size and modified time
 * Cross-platform: macOS, Linux, Windows Terminal
 
 ### Bookshelf
@@ -60,17 +62,20 @@ ReadCLI is a terminal ebook reader with support for `TXT` and `EPUB`, plus a loc
 * Filter by format and reading status
 * Remove from bookshelf only, or remove and delete the local file
 * Main bookshelf list focuses on titles, while the right panel shows details
+
 ### UI and Interaction
 
 * Three themes: `vscode`, `jetbrains`, `ops-console`
 * Dedicated status and shortcut hints for bookshelf, reading, TOC, and bookmarks
+* Press `z` in the reading view to switch between full and compact UI; the setting is saved
 * Import path input supports cursor movement, `Tab` completion, candidate selection, and paging
 * Drag files or directories directly into the import input
 * Supports both Vim-style keys and arrow-key navigation
 * Automatically checks GitHub Releases for updates on startup and shows the current version
-* Manual update check, release notes preview, and in-app self-update
+* Manual update check, release notes preview, and in-app self-update with download progress, size, and install stage
 * Boss Key support, including a custom external command
 * Auto page turning
+* Persists bookshelf selection, reading style, and latest reading state on exit
 
 ## Terminal Compatibility
 
@@ -219,6 +224,7 @@ Press `,` while reading to open the reading settings panel. You can adjust:
 
 Press `c` to cycle through bright preset colors.
 Press `t` to toggle auto page turning.
+Press `z` to switch between the full reading UI and compact reading UI. Compact mode hides the header, sidebars, and most hints, leaving the novel text, chapter title, and reading progress.
 
 ### 5. Check for updates
 
@@ -226,7 +232,7 @@ ReadCLI checks for updates on startup.
 
 If you skip an update from the automatic prompt, that version will not be shown again automatically. You can still press `u` at any time to run a manual update check.
 
-When you confirm an update, ReadCLI downloads the correct release package for the current platform and replaces the current binary. Restart the app after the update finishes.
+When you confirm an update, ReadCLI downloads the correct release package for the current platform and replaces the current binary. During the update it shows the download percentage, progress bar, downloaded size, and install stage. Restart the app after the update finishes.
 
 ### 6. Configure Boss Key
 
@@ -276,8 +282,8 @@ Press `?` to open the built-in help page. Both Vim-style keys and arrow keys are
 
 ### Reading
 
-* Vim-style: `j/k` page down/up, `[` / `]` previous/next chapter, `/` search, `n/N` next/previous result, `s/B` bookmarks, `m` TOC, `c` text color, `u` check updates
-* Arrow keys: `↑/↓` page down/up, `←/→` previous/next chapter, `u` check updates
+* Vim-style: `j/k` page down/up, `[` / `]` previous/next chapter, `/` search, `n/N` next/previous result, `s/B` bookmarks, `m` TOC, `c` text color, `z` compact/full UI, `u` check updates
+* Arrow keys: `↑/↓` page down/up, `←/→` previous/next chapter, `z` compact/full UI, `u` check updates
 * Reading settings: press `,` to adjust content width, margins, line spacing, text color, high contrast mode, basic color mode, and auto-page interval
 
 ### TOC / Bookmarks
@@ -291,6 +297,7 @@ Press `?` to open the built-in help page. Both Vim-style keys and arrow keys are
 * `+ / -` adjust visible content lines per page
 * `c` cycle text color
 * `T` switch theme
+* `z` switch compact / full reading UI
 * `u` manually check for updates
 * `p` show reading progress
 * `b` trigger Boss Key
@@ -321,6 +328,7 @@ This directory contains:
 * line spacing
 * auto-page interval in milliseconds
 * text color (`#RRGGBB`, `#RGB`, `R,G,B`)
+* `compact_mode`
 * `reading_high_contrast`
 * `force_basic_color`
 
@@ -332,6 +340,7 @@ Related documents:
 
 * [CHANGELOG](./CHANGELOG.md)
 * [CONTRIBUTING](./CONTRIBUTING.md)
+* [DEVELOPMENT_PLAN](./DEVELOPMENT_PLAN.md)
 
 ## Links
 

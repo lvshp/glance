@@ -34,13 +34,15 @@ const (
 	updateInstalled updateMessageKind = "installed"
 	updateFailed    updateMessageKind = "failed"
 	updateCurrent   updateMessageKind = "current"
+	updateProgress  updateMessageKind = "progress"
 )
 
 type updateMessage struct {
-	Kind    updateMessageKind
-	Release *lib.ReleaseInfo
-	Err     error
-	Manual  bool
+	Kind     updateMessageKind
+	Release  *lib.ReleaseInfo
+	Progress lib.UpdateProgress
+	Err      error
+	Manual   bool
 }
 
 type theme struct {
@@ -110,6 +112,7 @@ type appState struct {
 	updateRelease      *lib.ReleaseInfo
 	updateReturnMode   mode
 	updateMessages     chan updateMessage
+	updateProgress     lib.UpdateProgress
 	updatePromptManual bool
 
 	lastHomePath string

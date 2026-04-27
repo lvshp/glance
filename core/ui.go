@@ -47,7 +47,7 @@ func Run(initialFile string, requestedLines int, version string) {
 		compactMode:     cfg.CompactMode,
 		displayLines:    cfg.DisplayLines,
 		currentVersion:  strings.TrimSpace(version),
-		updateMessages:  make(chan updateMessage, 2),
+		updateMessages:  make(chan updateMessage, 16),
 	}
 
 	if app.bookshelf == nil {

@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -63,5 +64,36 @@ func TestUpdateInstallErrorIncludesTempDir(t *testing.T) {
 
 	if !strings.Contains(err, "/tmp/readcli-update-123") {
 		t.Fatalf("error string does not include temp dir: %q", err)
+	}
+}
+
+func TestCopyWithProgressReportsDownloadCompletion(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("readcli update payload")
+	var target bytes.Buffer
+	var reports []UpdateProgress
+
+	written, err := copyWithProgress(&target, bytes.NewReader(source), int64(len(source)), func(progress UpdateProgress) {
+		reports = append(reports, progress)
+	})
+	if err != nil {
+		t.Fatalf("copyWithProgress returned error: %v", err)
+	}
+	if written != int64(len(source)) {
+		t.Fatalf("written = %d, want %d", written, len(source))
+	}
+	if !bytes.Equal(target.Bytes(), source) {
+		t.Fatalf("copied bytes = %q, want %q", target.Bytes(), source)
+	}
+	if len(reports) == 0 {
+		t.Fatal("expected progress reports")
+	}
+	last := reports[len(reports)-1]
+	if last.Stage != UpdateStageDownload {
+		t.Fatalf("last stage = %q, want %q", last.Stage, UpdateStageDownload)
+	}
+	if last.Downloaded != int64(len(source)) || last.Total != int64(len(source)) {
+		t.Fatalf("last progress = %+v, want downloaded and total %d", last, len(source))
 	}
 }

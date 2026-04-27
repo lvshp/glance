@@ -32,6 +32,20 @@ type ReleaseInfo struct {
 	Assets  []ReleaseAsset `json:"assets"`
 }
 
+const (
+	UpdateStageDownload = "download"
+	UpdateStageExtract  = "extract"
+	UpdateStageReplace  = "replace"
+)
+
+type UpdateProgress struct {
+	Stage      string
+	Downloaded int64
+	Total      int64
+}
+
+type UpdateProgressFunc func(UpdateProgress)
+
 type UpdateInstallError struct {
 	Message string
 	TempDir string
@@ -115,6 +129,10 @@ func SelectReleaseAsset(release *ReleaseInfo, goos, goarch string) *ReleaseAsset
 }
 
 func InstallLatestReleaseAsset(version, url, executablePath string) error {
+	return InstallLatestReleaseAssetWithProgress(version, url, executablePath, nil)
+}
+
+func InstallLatestReleaseAssetWithProgress(version, url, executablePath string, onProgress UpdateProgressFunc) error {
 	tempDir, err := os.MkdirTemp("", "readcli-update-*")
 	if err != nil {
 		return err
@@ -153,7 +171,7 @@ func InstallLatestReleaseAsset(version, url, executablePath string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(archiveFile, resp.Body); err != nil {
+	if _, err := copyWithProgress(archiveFile, resp.Body, resp.ContentLength, onProgress); err != nil {
 		archiveFile.Close()
 		cleanup = false
 		return &UpdateInstallError{Message: "写入更新包失败: " + err.Error(), TempDir: tempDir}
@@ -186,6 +204,7 @@ func InstallLatestReleaseAsset(version, url, executablePath string) error {
 		return &UpdateInstallError{Message: "打开更新包失败: " + err.Error(), TempDir: tempDir}
 	}
 
+	reportUpdateProgress(onProgress, UpdateProgress{Stage: UpdateStageExtract})
 	var extractErr error
 	if isZip {
 		extractErr = extractBinaryFromZip(archiveReader, binaryFile)
@@ -218,11 +237,68 @@ func InstallLatestReleaseAsset(version, url, executablePath string) error {
 		_ = os.Remove(probePath)
 	}
 
+	reportUpdateProgress(onProgress, UpdateProgress{Stage: UpdateStageReplace})
 	if err := replaceExecutable(binaryPath, executablePath); err != nil {
 		cleanup = false
 		return &UpdateInstallError{Message: "覆盖当前二进制失败: " + err.Error(), TempDir: tempDir}
 	}
 	return nil
+}
+
+func copyWithProgress(dst io.Writer, src io.Reader, total int64, onProgress UpdateProgressFunc) (int64, error) {
+	buffer := make([]byte, 32*1024)
+	var written int64
+	var lastReport time.Time
+
+	report := func(force bool) {
+		if onProgress == nil {
+			return
+		}
+		now := time.Now()
+		if !force && now.Sub(lastReport) < 200*time.Millisecond {
+			return
+		}
+		lastReport = now
+		onProgress(UpdateProgress{
+			Stage:      UpdateStageDownload,
+			Downloaded: written,
+			Total:      total,
+		})
+	}
+
+	report(true)
+	for {
+		read, readErr := src.Read(buffer)
+		if read > 0 {
+			wrote, writeErr := dst.Write(buffer[:read])
+			if wrote > 0 {
+				written += int64(wrote)
+				report(false)
+			}
+			if writeErr != nil {
+				report(true)
+				return written, writeErr
+			}
+			if wrote != read {
+				report(true)
+				return written, io.ErrShortWrite
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				report(true)
+				return written, nil
+			}
+			report(true)
+			return written, readErr
+		}
+	}
+}
+
+func reportUpdateProgress(onProgress UpdateProgressFunc, progress UpdateProgress) {
+	if onProgress != nil {
+		onProgress(progress)
+	}
 }
 
 func CurrentExecutablePath() string {
